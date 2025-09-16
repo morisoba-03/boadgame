@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>みんなのボドゲ</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Yusei+Magic&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app-container">
+        <!-- トップページ -->
+        <div id="page-top" class="page active">
+            <header><h1>みんなのボドゲ</h1><p>- いつでもどこでも、すぐ遊べる -</p></header>
+            <main>
+                <button data-goto="page-select" class="main-button">オフラインで遊ぶ（ツール）</button>
+                <button class="main-button disabled" disabled>オンラインで対戦</button>
+            </main>
+            <footer><button data-goto="page-settings" class="icon-button">⚙️</button></footer>
+        </div>
+        <!-- ゲーム選択ページ -->
+        <div id="page-select" class="page">
+            <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>どのゲーム？</h2></header>
+            <main>
+                <button data-goto="page-ws-mode-select" class="main-button">🎲 ワードスナイパー</button>
+                <button data-goto="page-ito" class="main-button">🔢 I T O</button>
+                <button data-goto="page-bob-jiten" class="main-button">🗣️ ボブジテン</button>
+                <button data-goto="page-cat-choco" class="main-button">🍫 キャット＆チョコレート</button>
+                <button data-goto="page-stack-ttt" class="main-button">👑 スタック三目並べ</button>
+                <button data-goto="page-word-wolf" class="main-button">🐺 ワードウルフ</button>
+                <button data-goto="page-quiz-iisen" class="main-button">🎯 いいセン行きまSHOW！</button>
+                <button data-goto="page-make-ten-mode-select" class="main-button">🔟 10パズル</button>
+            </main>
+        </div>
+        
+        <!-- プレイヤー名設定画面 (汎用) -->
+        <div id="page-player-setup" class="page">
+            <header><button id="player-setup-back-btn" class="back-button">&lt; 戻る</button><h2>プレイヤー設定</h2></header>
+            <main>
+                <div id="player-names-container"></div>
+                <button id="player-setup-confirm-btn" class="main-button">ゲーム開始</button>
+            </main>
+        </div>
+
+        <!-- ワードスナイパー モード選択 -->
+        <div id="page-ws-mode-select" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>ワードスナイパー</h2></header>
+            <main><p>どのモードで遊びますか？</p><button data-goto="page-word-sniper" data-mode="normal" class="main-button">ノーマル</button><button data-goto="page-word-sniper" data-mode="kids" class="main-button">キッズ</button></main>
+        </div>
+        <!-- ワードスナイパー プレイ画面 -->
+        <div id="page-word-sniper" class="page">
+            <header><button data-goto="page-ws-mode-select" class="back-button">&lt; 戻る</button><h2 id="ws-header-title">ワードスナイパー</h2></header>
+            <main>
+                <div class="card fixed-height"><div class="card-title">お題</div><p id="ws-topic"></p></div>
+                <div class="card fixed-height"><div class="card-title">文字</div><p id="ws-char"></p></div>
+                <div class="ingame-options"><label><input type="checkbox" id="ws-opt-dakuon" checked> 濁音</label><label><input type="checkbox" id="ws-opt-handakuon" checked> 半濁音</label><label><input type="checkbox" id="ws-opt-youon" checked> 拗音(ゃ)</label></div>
+                <button id="ws-draw" class="main-button">次のカードをめくる</button>
+                <div class="bottom-fixed-area">
+                    <div id="ws-scoreboard" class="scoreboard-container"></div>
+                    <div class="player-config-area"><p>参加人数</p><div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="ws-player-count" min="2" max="10" value="4"><button class="num-btn plus">+</button></div></div>
+                </div>
+            </main>
+        </div>
+        <!-- ITO -->
+        <div id="page-ito" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>I T O</h2></header>
+            <main id="ito-main">
+                <div id="ito-setup">
+                    <p>プレイ人数を入力してください</p>
+                    <div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="ito-player-count" min="2" max="10" value="4"><button class="num-btn plus">+</button></div>
+                    <button id="ito-start-setup" class="main-button">プレイヤー名を設定</button>
+                </div>
+                <div id="ito-check" class="hidden">
+                    <p><span id="ito-current-player"></span>さん、数字を確認</p>
+                    <button id="ito-show-number" class="main-button">あなたの数字を見る</button>
+                    <p id="ito-number-display" class="large-text hidden"></p>
+                    <button id="ito-confirm-number" class="main-button hidden">確認しました</button>
+                </div>
+                <div id="ito-theme" class="hidden">
+                    <div class="card"><div class="card-title">お題</div><p id="ito-theme-display"></p></div>
+                    <div id="ito-scoreboard" class="scoreboard-container"></div>
+                    <button id="ito-new-theme" class="main-button">新しいお題</button>
+                    <button id="ito-reset" class="sub-button">ゲームをリセット</button>
+                </div>
+            </main>
+        </div>
+        <!-- ボブジテン -->
+        <div id="page-bob-jiten" class="page">
+             <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>ボブジテン</h2></header>
+            <main>
+                <div class="card"><div class="card-title">お題</div><p id="bj-topic"></p></div>
+                <div id="bj-special-card" class="card hidden"><div class="card-title">特殊お題</div><p id="bj-special-topic"></p></div>
+                <div class="ingame-options single-option"><label><input type="checkbox" id="bj-opt-special" checked> 特殊お題あり</label></div>
+                <button id="bj-draw" class="main-button">次のお題へ</button>
+                <div class="bottom-fixed-area">
+                    <div id="bj-scoreboard" class="scoreboard-container"></div>
+                    <div class="player-config-area"><p>参加人数</p><div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="bj-player-count" min="2" max="10" value="4"><button class="num-btn plus">+</button></div></div>
+                </div>
+            </main>
+        </div>
+        <!-- キャット＆チョコレート -->
+        <div id="page-cat-choco" class="page">
+             <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>キャット＆チョコレート</h2></header>
+            <main class="compact-main">
+                <div class="card"><div class="card-title">イベント</div><p id="cc-event"></p></div>
+                <div class="card"><div class="card-title">必要アイテム数</div><p id="cc-item-count"></p></div>
+                <div class="card-group-title">手札アイテム</div>
+                <div id="cc-items-hand"></div>
+                <button id="cc-draw" class="main-button">次のラウンド</button>
+                <div class="bottom-fixed-area">
+                    <div id="cc-scoreboard" class="scoreboard-container"></div>
+                    <div class="player-config-area"><p>参加人数</p><div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="cc-player-count" min="2" max="10" value="4"><button class="num-btn plus">+</button></div></div>
+                </div>
+            </main>
+        </div>
+        <!-- スタック三目並べ -->
+        <div id="page-stack-ttt" class="page">
+            <header>
+                <button data-goto="page-select" class="back-button">&lt; 戻る</button>
+                <h2>スタック三目並べ</h2>
+                <button id="sttt-header-reset" class="header-icon-button">🔄</button>
+            </header>
+            <main class="sttt-main">
+                <div id="sttt-player2-area" class="sttt-player-area">
+                    <div class="sttt-hand-container"><div class="sttt-hand-stack" data-player="2" data-size="L"></div><div class="sttt-hand-stack" data-player="2" data-size="M"></div><div class="sttt-hand-stack" data-player="2" data-size="S"></div></div>
+                </div>
+                <div id="sttt-board-wrapper">
+                    <div id="sttt-info"></div>
+                    <div id="sttt-board"></div>
+                </div>
+                <div id="sttt-player1-area" class="sttt-player-area active-player">
+                    <div class="sttt-hand-container"><div class="sttt-hand-stack" data-player="1" data-size="L"></div><div class="sttt-hand-stack" data-player="1" data-size="M"></div><div class="sttt-hand-stack" data-player="1" data-size="S"></div></div>
+                </div>
+                <button id="sttt-reset" class="main-button hidden">もう一度遊ぶ</button>
+            </main>
+        </div>
+        
+        <!-- ワードウルフ ページ -->
+        <div id="page-word-wolf" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>ワードウルフ</h2></header>
+            <main id="ww-main">
+                <div id="ww-setup">
+                    <p>プレイ人数</p>
+                    <div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="ww-player-count" min="3" max="10" value="4"><button class="num-btn plus">+</button></div>
+                    <p>議論時間</p>
+                    <select id="ww-time-select">
+                        <option value="30">30秒</option>
+                        <option value="60">1分</option>
+                        <option value="90">1分30秒</option>
+                        <option value="120">2分</option>
+                        <option value="150">2分30秒</option>
+                        <option value="180" selected>3分</option>
+                        <option value="210">3分30秒</option>
+                        <option value="240">4分</option>
+                        <option value="270">4分30秒</option>
+                        <option value="300">5分</option>
+                    </select>
+                    <button id="ww-start-setup" class="main-button">プレイヤー名を設定</button>
+                </div>
+                <div id="ww-check" class="hidden"><p><span id="ww-current-player"></span>さん、お題を確認</p><button id="ww-show-word" class="main-button">あなたのお題を見る</button><p id="ww-word-display" class="large-text hidden"></p><button id="ww-confirm-word" class="main-button hidden">確認しました</button></div>
+                <div id="ww-discuss" class="hidden"><p>お題について話し合おう！</p><div id="ww-timer" class="large-text">03:00</div><button id="ww-timer-start" class="main-button">タイマースタート</button><button id="ww-show-result" class="main-button">結果発表へ</button></div>
+                <div id="ww-result" class="hidden"><h2>結果発表</h2><ul id="ww-result-list"></ul><div id="ww-scoreboard" class="scoreboard-container"></div><button id="ww-reset" class="main-button">もう一度遊ぶ</button></div>
+            </main>
+        </div>
+        
+        <!-- いいセン行きまSHOW！ ページ -->
+        <div id="page-quiz-iisen" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>いいセン行きまSHOW！</h2></header>
+            <main id="qis-main">
+                <div id="qis-setup">
+                    <p>プレイ人数</p>
+                    <div class="number-input-wrapper"><button class="num-btn minus">-</button><input type="number" id="qis-player-count" min="2" max="10" value="4"><button class="num-btn plus">+</button></div>
+                    <button id="qis-start-setup" class="main-button">プレイヤー名を設定</button>
+                </div>
+                <div id="qis-game" class="hidden">
+                    <div class="card"><div class="card-title">お題</div><p id="qis-question-display"></p></div>
+                    <div class="card">
+                        <div class="card-title">回答入力 (全員の数字をスペースやカンマ区切りで入力)</div>
+                        <textarea id="qis-calc-input" rows="3" placeholder="例: 10 25 50 80"></textarea>
+                        <button id="qis-calc-button" class="sub-button">中央値を計算</button>
+                        <p id="qis-calc-result"></p>
+                    </div>
+                    <button id="qis-new-question" class="main-button">次のお題</button>
+                    <div id="qis-scoreboard" class="scoreboard-container"></div>
+                    <button id="qis-reset" class="sub-button">ゲームをリセット</button>
+                </div>
+            </main>
+        </div>
+
+        <!-- 10パズル モード選択 -->
+        <div id="page-make-ten-mode-select" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>10パズル</h2></header>
+            <main>
+                <p>どの難易度で遊びますか？</p>
+                <button data-goto="page-make-ten" data-difficulty="easiest" class="main-button">もっともかんたん (+,-だけ/マイナスなし)</button>
+                <button data-goto="page-make-ten" data-difficulty="easy" class="main-button">かんたん (+と-だけ)</button>
+                <button data-goto="page-make-ten" data-difficulty="hard" class="main-button">むずかしい (×と÷も使う)</button>
+            </main>
+        </div>
+        <!-- 10パズル プレイ画面 -->
+        <div id="page-make-ten" class="page">
+            <header><button data-goto="page-make-ten-mode-select" class="back-button">&lt; 戻る</button><h2 id="mt-header-title">10パズル</h2></header>
+            <main>
+                <div class="card"><div class="card-title">この4つの数字で10を作ろう！</div><div id="mt-numbers"></div></div>
+                <div id="mt-answer-area" class="hidden"><div class="card-title">答えの例</div><ul id="mt-answer-list"></ul></div>
+                <button id="mt-show-answer" class="sub-button">答えを見る</button>
+                <button id="mt-draw" class="main-button">次の問題</button>
+            </main>
+        </div>
+
+        <!-- 設定ページ -->
+        <div id="page-settings" class="page">
+            <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>お題の管理</h2></header>
+            <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
+        </div>
+    </div>
+    <script src="themes.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
