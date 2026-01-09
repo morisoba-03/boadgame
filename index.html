@@ -17,6 +17,12 @@
             <main>
                 <button data-goto="page-select" class="main-button">オフラインで遊ぶ（ツール）</button>
                 <button class="main-button disabled" disabled>オンラインで対戦</button>
+                <div class="hiragana-mode-toggle">
+                    <label>
+                        <input type="checkbox" id="hiragana-mode-checkbox">
+                        <span>ひらがなモード</span>
+                    </label>
+                </div>
             </main>
             <footer><button data-goto="page-settings" class="icon-button">⚙️</button></footer>
         </div>
@@ -24,14 +30,38 @@
         <div id="page-select" class="page">
             <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>どのゲーム？</h2></header>
             <main>
-                <button data-goto="page-ws-mode-select" class="main-button">🎲 ワードスナイパー</button>
-                <button data-goto="page-ito" class="main-button">🔢 I T O</button>
-                <button data-goto="page-bob-jiten" class="main-button">🗣️ ボブジテン</button>
-                <button data-goto="page-cat-choco" class="main-button">🍫 キャット＆チョコレート</button>
-                <button data-goto="page-stack-ttt" class="main-button">👑 スタック三目並べ</button>
-                <button data-goto="page-word-wolf" class="main-button">🐺 ワードウルフ</button>
-                <button data-goto="page-quiz-iisen" class="main-button">🎯 いいセン行きまSHOW！</button>
-                <button data-goto="page-make-ten-mode-select" class="main-button">🔟 10パズル</button>
+                <div class="game-button-row">
+                    <button data-goto="page-ws-mode-select" class="main-button">🎲 ワードスナイパー</button>
+                    <button class="rule-button" data-game="word-sniper">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-ito" class="main-button">🔢 I T O</button>
+                    <button class="rule-button" data-game="ito">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-bob-jiten" class="main-button">🗣️ ボブジテン</button>
+                    <button class="rule-button" data-game="bob-jiten">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-cat-choco" class="main-button">🍫 キャット＆チョコレート</button>
+                    <button class="rule-button" data-game="cat-choco">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-stack-ttt" class="main-button">👑 スタック三目並べ</button>
+                    <button class="rule-button" data-game="stack-ttt">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-word-wolf" class="main-button">🐺 ワードウルフ</button>
+                    <button class="rule-button" data-game="word-wolf">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-quiz-iisen" class="main-button">🎯 いいセン行きまSHOW！</button>
+                    <button class="rule-button" data-game="quiz-iisen">？</button>
+                </div>
+                <div class="game-button-row">
+                    <button data-goto="page-make-ten-mode-select" class="main-button">🔟 10パズル</button>
+                    <button class="rule-button" data-game="make-ten">？</button>
+                </div>
             </main>
         </div>
         

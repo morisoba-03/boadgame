@@ -489,4 +489,118 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadThemes();
     getEl('page-top').classList.add('active');
+
+    // ひらがなモードの切り替え
+    const hiraganaMode = {
+        enabled: false,
+        textMap: {
+            'オフラインで遊ぶ（ツール）': 'オフラインであそぶ（ツール）',
+            'オンラインで対戦': 'オンラインでたいせん',
+            '戻る': 'もどる',
+            'どのゲーム？': 'どのゲーム？',
+            'ゲーム開始': 'ゲームかいし',
+            '次のカードをめくる': 'つぎのカードをめくる',
+            '次のお題へ': 'つぎのおだいへ',
+            '次のラウンド': 'つぎのラウンド',
+            'もう一度遊ぶ': 'もういちどあそぶ',
+            '参加人数': 'さんかにんずう',
+            'スコア': 'スコア',
+            'プレイヤー': 'プレイヤー',
+            'お題': 'おだい',
+            '文字': 'もじ',
+            '設定': 'せってい',
+            '各': 'かく',
+            '指定': 'してい',
+            '単語': 'たんご',
+            '含': 'ふく',
+            '言': 'い',
+            '回答': 'かいとう',
+            '連想': 'れんそう',
+            '協力': 'きょうりょく',
+            '全員': 'ぜんいん',
+            '順番': 'じゅんばん',
+            '数字': 'すうじ',
+            '並': 'なら',
+            '説明': 'せつめい',
+            '使': 'つか',
+            '乗': 'の',
+            '切': 'き',
+            '抜': 'ぬ',
+            '役割': 'やくわり',
+            '与': 'あた',
+            '見破': 'みやぶ',
+            '話': 'はな',
+            '合': 'あ',
+            '質問': 'しつもん',
+            '範囲': 'はんい',
+            '自由': 'じゆう',
+            '数': 'かず',
+            '枚': 'まい',
+            '計算': 'けいさん',
+            '式': 'しき',
+            '作': 'つく'
+        },
+        toggle() {
+            this.enabled = !this.enabled;
+            this.apply();
+            localStorage.setItem('hiragana-mode', this.enabled);
+        },
+        apply() {
+            document.body.classList.toggle('hiragana-mode', this.enabled);
+            if (this.enabled) {
+                this.replaceText(document.body);
+            } else {
+                location.reload();
+            }
+        },
+        replaceText(element) {
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+            const nodesToReplace = [];
+            while (walker.nextNode()) {
+                nodesToReplace.push(walker.currentNode);
+            }
+            nodesToReplace.forEach(node => {
+                let text = node.nodeValue;
+                Object.keys(this.textMap).forEach(key => {
+                    text = text.replace(new RegExp(key, 'g'), this.textMap[key]);
+                });
+                node.nodeValue = text;
+            });
+        }
+    };
+
+    const hiraganaCheckbox = getEl('hiragana-mode-checkbox');
+    if (hiraganaCheckbox) {
+        const saved = localStorage.getItem('hiragana-mode');
+        if (saved === 'true') {
+            hiraganaCheckbox.checked = true;
+            hiraganaMode.enabled = true;
+            hiraganaMode.apply();
+        }
+        hiraganaCheckbox.addEventListener('change', () => hiraganaMode.toggle());
+    }
+
+    // ルール説明ボタンのイベントハンドラー
+    const gameRules = {
+        'word-sniper': 'ワードスナイパー\n\nお題に合った言葉を、指定された文字で始まる言葉で答えるゲームです。\n\n1. お題と文字が表示されます\n2. その文字で始まる、お題に合った言葉を考えます\n3. 一番早く答えた人が得点します',
+        'ito': 'I T O\n\n1～100の数字を使って、テーマに沿った大きさを表現するゲームです。\n\n1. 各プレイヤーに1～100の数字が配られます\n2. テーマが発表されます\n3. 自分の数字の大きさをテーマに例えて表現します\n4. 全員で数字の小さい順に並べます',
+        'bob-jiten': 'ボブジテン\n\nカタカナ語を、カタカナを使わずに説明するゲームです。\n\n1. お題のカタカナ語が表示されます\n2. カタカナを一切使わずに説明します\n3. 他のプレイヤーが当てたら得点',
+        'cat-choco': 'キャット＆チョコレート\n\nピンチな状況を、配られたアイテムで切り抜けるゲームです。\n\n1. イベント（ピンチな状況）が発表されます\n2. 必要なアイテム数が表示されます\n3. 手札のアイテムを使って、どう切り抜けるか説明します',
+        'stack-ttt': 'スタック三目並べ\n\n駒を重ねられる三目並べです。\n\n1. 各プレイヤーはS・M・Lサイズの駒を2個ずつ持っています\n2. 大きい駒は小さい駒の上に重ねて置けます\n3. 先に縦・横・斜めに3つ並べた方の勝ち',
+        'word-wolf': 'ワードウルフ\n\n違うお題を持つ少数派を見つけるゲームです。\n\n1. 各プレイヤーにお題が配られます（1人だけ違うお題）\n2. 制限時間内で自分のお題について話し合います\n3. 投票で少数派（ウルフ）を当てます',
+        'quiz-iisen': 'いいセン行きまSHOW！\n\n答えが数字の問題で、みんなの答えの中央値を当てるゲームです。\n\n1. お題が発表されます\n2. 各プレイヤーが数字で答えます\n3. 中央値に一番近い人が得点',
+        'make-ten': '10パズル\n\n4つの数字を使って、答えが10になる式を作るゲームです。\n\n1. 4つの数字が表示されます\n2. すべての数字を1回ずつ使います\n3. 四則演算（+、-、×、÷）で答えが10になる式を作ります',
+        'battle-line': 'バトルライン\n\n9つの戦場で部隊カードを配置し、過半数の戦場を確保するゲームです。\n\n1. 各戦場に3枚ずつカードを配置します\n2. 色と数字で役を作ります（ストレート、フラッシュなど）\n3. 役の強さで戦場を確保し、5つ以上または連続する3つを取れば勝利'
+    };
+
+    document.querySelectorAll('.rule-button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const gameKey = btn.dataset.game;
+            const rule = gameRules[gameKey];
+            if (rule) {
+                alert(rule);
+            }
+        });
+    });
 });

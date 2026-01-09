@@ -102,3 +102,18 @@ textarea { width: 90%; font-size: 1rem; text-align: left; padding: 0.8rem; margi
 .player-score { font-size: 0.9rem; margin: 0 1rem; }
 .score-controls { display: flex; gap: 0.5rem; }
 .score-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--text-color); background-color: var(--bg-color); cursor: pointer; font-size: 1.2rem; line-height: 1; }
+
+/* ひらがなモード */
+.hiragana-mode-toggle { margin-top: 2rem; display: flex; justify-content: center; }
+.hiragana-mode-toggle label { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; cursor: pointer; }
+.hiragana-mode-toggle input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+
+/* ゲーム選択画面のレイアウト */
+.game-button-row { display: flex; align-items: center; gap: 0.5rem; width: 85%; margin: 1rem auto; }
+.game-button-row .main-button { width: 100%; margin: 0; flex: 1; }
+.rule-button { width: 40px; height: 40px; min-width: 40px; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--text-color); background-color: var(--card-bg-color); cursor: pointer; font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; justify-content: center; transition: all 0.1s ease; }
+.rule-button:active { transform: scale(0.95); }
+
+/* プレイヤー名をクリック可能に */
+.player-name { cursor: pointer; user-select: none; }
+.player-name:hover { text-decoration: underline; }
