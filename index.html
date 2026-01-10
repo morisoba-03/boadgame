@@ -62,6 +62,10 @@
                     <button data-goto="page-make-ten-mode-select" class="main-button">🔟 10パズル</button>
                     <button class="rule-button" data-game="make-ten">？</button>
                 </div>
+                <div class="game-button-row">
+                    <button data-goto="page-ng-word" class="main-button">NGワードゲーム</button>
+                    <button class="rule-button" data-game="ng-word">？</button>
+                </div>
             </main>
         </div>
         
@@ -240,10 +244,18 @@
             </main>
         </div>
 
+        <!-- NGワードゲーム -->
+        <div id="page-ng-word" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>NGワードゲーム</h2></header>
+            <main>
+                <div id="game-container"></div>
+            </main>
+        </div>
+
         <!-- 設定ページ -->
         <div id="page-settings" class="page">
             <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>お題の管理</h2></header>
-            <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
+            <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button><button class="tab-button" data-game="ng-word">NGワード</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
         </div>
     </div>
     <script src="themes.js"></script>

@@ -1,0 +1,7 @@
+# Local backups
+*.bak
+*.bak-*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
