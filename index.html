@@ -39,7 +39,7 @@
                     <button class="rule-button" data-game="ito">？</button>
                 </div>
                 <div class="game-button-row">
-                    <button data-goto="page-bob-jiten" class="main-button">🗣️ ボブジテン</button>
+                    <button data-goto="page-bob-jiten-mode-select" class="main-button">🗣️ ボブジテン</button>
                     <button class="rule-button" data-game="bob-jiten">？</button>
                 </div>
                 <div class="game-button-row">
@@ -63,7 +63,7 @@
                     <button class="rule-button" data-game="make-ten">？</button>
                 </div>
                 <div class="game-button-row">
-                    <button data-goto="page-ng-word" class="main-button">NGワードゲーム</button>
+                    <button data-goto="page-ng-word" class="main-button">🤐 NGワードゲーム</button>
                     <button class="rule-button" data-game="ng-word">？</button>
                 </div>
             </main>
@@ -120,9 +120,16 @@
                 </div>
             </main>
         </div>
-        <!-- ボブジテン -->
+        
+        <!-- ボブジテン モード選択 -->
+        <div id="page-bob-jiten-mode-select" class="page">
+            <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>ボブジテン</h2></header>
+            <main><p>どのモードで遊びますか？</p><button data-goto="page-bob-jiten" data-mode="normal" class="main-button">ノーマル</button><button data-goto="page-bob-jiten" data-mode="kids" class="main-button">キッズ</button></main>
+        </div>
+        
+        <!-- ボブジテン プレイ画面 -->
         <div id="page-bob-jiten" class="page">
-             <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>ボブジテン</h2></header>
+             <header><button data-goto="page-bob-jiten-mode-select" class="back-button">&lt; 戻る</button><h2 id="bj-header-title">ボブジテン</h2></header>
             <main>
                 <div class="card"><div class="card-title">お題</div><p id="bj-topic"></p></div>
                 <div id="bj-special-card" class="card hidden"><div class="card-title">特殊お題</div><p id="bj-special-topic"></p></div>
@@ -247,15 +254,91 @@
         <!-- NGワードゲーム -->
         <div id="page-ng-word" class="page">
             <header><button data-goto="page-select" class="back-button">&lt; 戻る</button><h2>NGワードゲーム</h2></header>
-            <main>
-                <div id="game-container"></div>
+            <main id="ngw-main">
+                <!-- プレイヤー設定 -->
+                <div id="ngw-player-setup">
+                    <p>プレイ人数（2〜4人）</p>
+                    <div class="number-input-wrapper">
+                        <button class="num-btn minus">-</button>
+                        <input type="number" id="ngw-player-count" min="2" max="4" value="4">
+                        <button class="num-btn plus">+</button>
+                    </div>
+                    <p>プレイヤー名を入力してください</p>
+                    <div id="ngw-player-inputs"></div>
+                    <button id="ngw-confirm-names" class="main-button">確定して次へ</button>
+                </div>
+                <!-- モード選択 -->
+                <div id="ngw-mode-select" class="hidden">
+                    <p>ゲームモードを選択</p>
+                    <button id="ngw-random-mode" class="main-button">ランダムモード</button>
+                    <button id="ngw-custom-mode" class="main-button">カスタムモード</button>
+                </div>
+                <!-- カスタム入力 (回し入力) -->
+                <div id="ngw-custom-input" class="hidden">
+                    <p id="ngw-custom-instruction"></p>
+                    <input type="password" id="ngw-custom-word" placeholder="NGワードを入力">
+                    <button id="ngw-custom-next" class="main-button">次へ</button>
+                </div>
+
+                <!-- 確認フェーズ（回し読み用：隠す→渡す→長押し表示） -->
+                <div id="ngw-pass" class="hidden">
+                    <p class="large-text"><span id="ngw-pass-player"></span>へ<br>画面を隠して端末を渡してください</p>
+                    <button id="ngw-pass-next" class="main-button">受け取ったら押す</button>
+                </div>
+                <div id="ngw-check" class="hidden">
+                    <p><span id="ngw-check-player"></span>さん、相手のNGワードを確認</p>
+                    <button id="ngw-reveal-others" class="main-button">相手のワードを見る（長押し）</button>
+                    <div id="ngw-others-display" class="card hidden" style="margin-top: 10px; background: #fffacd;">
+                        <div class="card-title">相手が言ってはいけない言葉</div>
+                        <ul id="ngw-others-list" style="list-style: none; padding: 0; margin: 0; font-family: sans-serif; text-align: left;"></ul>
+                    </div>
+                    <p style="color: #ff6b6b; font-weight: bold;">※あなたのNGワードは表示されません</p>
+                    <button id="ngw-change-topic" class="sub-button hidden" style="width: 100%;">お題を変える（再抽選）</button>
+                    <button id="ngw-confirm-check" class="main-button">確認しました</button>
+                </div>
+                <div id="ngw-ready" class="hidden">
+                    <p class="large-text">準備完了！</p>
+                    <p>お互いに相手のNGワードを確認しました</p>
+                    <button id="ngw-start-game" class="main-button">会話スタート</button>
+                    <button id="ngw-skip-topic" class="sub-button hidden" style="width: 100%;">お題をスキップ（再抽選）</button>
+                </div>
+                <!-- ゲーム中 -->
+                <div id="ngw-game" class="hidden">
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div id="ngw-game-players" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;"></div>
+                        <div id="ngw-timer" class="large-text" style="font-size: 3em; text-align: center; margin: 20px 0;">03:00</div>
+                        <button id="ngw-timer-start" class="main-button">タイマースタート</button>
+                    </div>
+                    <div style="margin: 20px 0;">
+                        <p style="text-align: center; margin-bottom: 10px;">相手のワードを確認（長押し）</p>
+                        <div id="ngw-game-check-buttons"></div>
+                        <div id="ngw-opponent-display" class="card hidden" style="margin-top: 10px; background: #fffacd;">
+                            <div class="card-title">相手のNGワード</div>
+                            <ul id="ngw-opponent-list" style="list-style: none; padding: 0; margin: 0; font-family: sans-serif; text-align: left;"></ul>
+                        </div>
+                    </div>
+                    <div style="margin-top: 30px;">
+                        <p style="text-align: center; font-weight: bold; margin-bottom: 10px;">脱落記録</p>
+                        <div id="ngw-out-buttons"></div>
+                        <button id="ngw-finish" class="sub-button" style="width: 100%;">ゲーム終了（結果表示）</button>
+                    </div>
+                </div>
+                <!-- 結果 -->
+                <div id="ngw-result" class="hidden">
+                    <h2 id="ngw-winner" style="text-align: center; font-size: 2em; margin-bottom: 20px;"></h2>
+                    <div class="card">
+                        <div class="card-title">NGワード公開</div>
+                        <ul id="ngw-result-list" style="list-style: none; padding: 0; margin: 0; font-family: sans-serif; text-align: left;"></ul>
+                    </div>
+                    <button id="ngw-reset" class="main-button">もう一度遊ぶ</button>
+                </div>
             </main>
         </div>
 
         <!-- 設定ページ -->
         <div id="page-settings" class="page">
             <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>お題の管理</h2></header>
-            <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button><button class="tab-button" data-game="ng-word">NGワード</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
+            <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button><button class="tab-button" data-game="NGワードゲーム">NGワード</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
         </div>
     </div>
     <script src="themes.js"></script>

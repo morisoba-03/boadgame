@@ -5,42 +5,49 @@
 document.addEventListener('DOMContentLoaded', () => {
     const getEl = (id) => document.getElementById(id);
     const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
+    const containsKanji = (text) => /[\u3400-\u4DBF\u4E00-\u9FFF]/.test(String(text || ''));
+    const HIRAGANA_MODE_UNAVAILABLE_TEXT = 'ひらがなもーどでは ひょうじできない おだいです';
+
+    const alertByMode = (normalText, hiraganaText) => {
+        if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+            alert(hiraganaText);
+        } else {
+            alert(normalText);
+        }
+    };
+
+    const confirmByMode = (normalText, hiraganaText) => {
+        if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+            return confirm(hiraganaText);
+        }
+        return confirm(normalText);
+    };
+
+    const pickNoKanji = (list, predicate = () => true) => {
+        if (!Array.isArray(list)) return null;
+        const filtered = list.filter(item => {
+            if (!predicate(item)) return false;
+            if (Array.isArray(item)) return item.every(v => !containsKanji(v));
+            return !containsKanji(item);
+        });
+        if (filtered.length === 0) return null;
+        return shuffle(filtered)[0];
+    };
     let themes = {};
-
-    // ひらがなモードでも使える「漢字なし」デフォルト（カタカナ/英語はそのままでOK）
-    const DEFAULT_NG_WORDS = [
-        'やきにく', 'YouTuber', 'はつこい', 'せいじ', 'きんにく', 'タピオカ', 'おし', 'てんしょく', 'しつれん', 'いぬ',
-        'ねこ', 'スマホ', 'おふろ', 'きゅうしょく', 'ぶかつ', 'しゅくだい', 'ゲーム', 'マンガ', 'アニメ', 'りょこう',
-        'クリスマス', 'しょうがつ', 'はなび', 'おんせん', 'カラオケ', 'すし', 'ラーメン', 'コーヒー', 'しょうぎ', 'サッカー',
-        'やきゅう', 'えいが', 'アイドル', 'オムライス', 'ピザ'
-    ];
-
-    function ensureNgWordThemes() {
-        if (!themes || typeof themes !== 'object') return;
-        const existing = themes['ng-word'];
-        if (Array.isArray(existing) && existing.length) return;
-        themes['ng-word'] = [...DEFAULT_NG_WORDS];
-    }
 
     const pages = document.querySelectorAll('.page');
     document.body.addEventListener('click', (e) => {
         const button = e.target.closest('button[data-goto]');
         if (button) {
             const pageId = button.dataset.goto;
-
-            const currentActive = document.querySelector('.page.active');
-            const currentPageId = currentActive ? currentActive.id : null;
-            if (currentPageId === 'page-ng-word' && pageId !== 'page-ng-word') {
-                try { if (ngw && ngw.game) ngw.game.stopTimer(); } catch (_) {}
-            }
-
             pages.forEach(p => p.classList.remove('active'));
             getEl(pageId).classList.add('active');
             const initFuncs = {
                 'page-ws-mode-select': () => {},
                 'page-word-sniper': () => ws.init(button.dataset.mode),
                 'page-ito': () => ito.init(),
-                'page-bob-jiten': () => bj.init(),
+                'page-bob-jiten-mode-select': () => {},
+                'page-bob-jiten': () => bj.init(button.dataset.mode),
                 'page-cat-choco': () => cc.init(),
                 'page-stack-ttt': sttt.init,
                 'page-word-wolf': () => ww.init(),
@@ -58,15 +65,40 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadThemes() {
         if (typeof initialThemes !== 'undefined') {
             const storedThemes = localStorage.getItem('bodoge-themes-v4.5');
+            const loadedFromStorage = !!storedThemes;
             try {
                 const parsed = storedThemes ? JSON.parse(storedThemes) : JSON.parse(JSON.stringify(initialThemes));
-                if(!parsed.ワードスナイパー || !parsed.ITO || !parsed.ボブジテン || !parsed['キャット＆チョコレート'] || !parsed['ワードウルフ'] || !parsed['クイズいいセン行きまSHOW！']) throw new Error("Data structure mismatch");
+                if(!parsed.ワードスナイパー || !parsed.ITO || !parsed.ボブジテン || !parsed['キャット&チョコレート'] || !parsed['ワードウルフ'] || !parsed['クイズいいセン行きまSHOW!'] || !parsed['NGワードゲーム']) throw new Error('Data structure mismatch');
                 themes = parsed;
-                ensureNgWordThemes();
             } catch (e) {
                 console.error("Failed to load themes, falling back to initial data.", e);
                 themes = JSON.parse(JSON.stringify(initialThemes));
-                ensureNgWordThemes();
+            }
+
+            // NGワードは最低200件を保証（保存済みデータが少ない場合に初期データから補完）
+            try {
+                const key = 'NGワードゲーム';
+                const minCount = 200;
+                const current = Array.isArray(themes[key]) ? themes[key] : [];
+                const defaults = Array.isArray(initialThemes[key]) ? initialThemes[key] : [];
+
+                const beforeLen = current.length;
+                const set = new Set(current);
+                defaults.forEach(w => {
+                    if (current.length >= minCount) return;
+                    if (!set.has(w)) {
+                        current.push(w);
+                        set.add(w);
+                    }
+                });
+                themes[key] = current;
+
+                const changed = current.length !== beforeLen;
+                if (changed && loadedFromStorage) {
+                    localStorage.setItem('bodoge-themes-v4.5', JSON.stringify(themes));
+                }
+            } catch (e) {
+                console.warn('Failed to ensure minimum NG words.', e);
             }
         } else {
             console.error("initialThemes is not defined. Make sure themes.js is loaded.");
@@ -128,7 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if(getEl('ws-opt-dakuon').checked) charPool.push(...ws.chars.dakuon); 
             if(getEl('ws-opt-handakuon').checked) charPool.push(...ws.chars.handakuon); 
             if(getEl('ws-opt-youon').checked) charPool.push(...ws.chars.youon); 
-            ws.topicEl.textContent = shuffle(themes['ワードスナイパー'][ws.mode])[0]; 
+
+            const modeKey = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && themes['ワードスナイパー']?.kids) ? 'kids' : ws.mode;
+            const topicList = themes['ワードスナイパー']?.[modeKey] || [];
+            const topic = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(topicList)
+                : shuffle(topicList)[0];
+            ws.topicEl.textContent = topic || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+
             ws.charEl.textContent = shuffle(charPool)[0]; 
         },
         init: (mode) => { 
@@ -156,17 +195,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const bj = { 
         id: 'page-bob-jiten',
+        mode: 'normal',
+        headerTitle: getEl('bj-header-title'),
         gameState: { players: [] },
         draw: () => { 
-            getEl('bj-topic').textContent = shuffle(themes['ボブジテン'].normal)[0]; 
+            const modeKey = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && themes['ボブジテン']?.kids) ? 'kids' : bj.mode;
+            const topicList = themes['ボブジテン']?.[modeKey] || [];
+            const topic = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(topicList)
+                : shuffle(topicList)[0];
+            getEl('bj-topic').textContent = topic || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+
             if (getEl('bj-opt-special').checked && Math.random() * 100 < 20) { 
-                getEl('bj-special-topic').textContent = shuffle(themes['ボブジテン'].special)[0]; 
+                const specialList = themes['ボブジテン']?.special || [];
+                const special = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                    ? pickNoKanji(specialList)
+                    : shuffle(specialList)[0];
+                getEl('bj-special-topic').textContent = special || HIRAGANA_MODE_UNAVAILABLE_TEXT;
                 getEl('bj-special-card').classList.remove('hidden'); 
             } else { 
                 getEl('bj-special-card').classList.add('hidden'); 
             } 
         }, 
-        init: () => {
+        init: (mode) => {
+            if(!mode) return;
+            bj.mode = mode;
+            bj.headerTitle.textContent = `ボブジテン (${mode === 'normal' ? 'ノーマル' : 'キッズ'})`;
             getEl('bj-player-count').value = 4;
             bj.setupPlayers();
             bj.draw();
@@ -189,12 +243,31 @@ document.addEventListener('DOMContentLoaded', () => {
         id: 'page-cat-choco',
         gameState: { players: [] },
         draw: () => { 
-            getEl('cc-event').textContent = shuffle(themes['キャット＆チョコレート'].events)[0]; 
+            const eventsList = themes['キャット＆チョコレート']?.events || [];
+            const eventText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(eventsList)
+                : shuffle(eventsList)[0];
+            getEl('cc-event').textContent = eventText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+
             getEl('cc-item-count').textContent = Math.floor(Math.random() * 3) + 1; 
-            const items = shuffle(themes['キャット＆チョコレート'].items).slice(0, 3); 
+
+            const itemsList = themes['キャット＆チョコレート']?.items || [];
+            const sourceItems = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? (itemsList.filter(t => !containsKanji(t)))
+                : itemsList;
+            const items = shuffle(sourceItems).slice(0, 3); 
             const handEl = getEl('cc-items-hand'); 
             handEl.innerHTML = ''; 
-            items.forEach(item => { const card = document.createElement('div'); card.className = 'card'; const p = document.createElement('p'); p.textContent = item; card.appendChild(p); handEl.appendChild(card); }); 
+            if (items.length === 0) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const p = document.createElement('p');
+                p.textContent = HIRAGANA_MODE_UNAVAILABLE_TEXT;
+                card.appendChild(p);
+                handEl.appendChild(card);
+            } else {
+                items.forEach(item => { const card = document.createElement('div'); card.className = 'card'; const p = document.createElement('p'); p.textContent = item; card.appendChild(p); handEl.appendChild(card); }); 
+            }
         }, 
         init: () => {
             getEl('cc-player-count').value = 4;
@@ -271,7 +344,11 @@ document.addEventListener('DOMContentLoaded', () => {
         showNumber: () => { getEl('ito-number-display').textContent = ito.gameState.players[ito.gameState.currentPlayerIndex].number; getEl('ito-number-display').classList.remove('hidden'); getEl('ito-confirm-number').classList.remove('hidden'); getEl('ito-show-number').classList.add('hidden'); },
         confirmNumber: () => { ito.gameState.currentPlayerIndex++; if (ito.gameState.currentPlayerIndex < ito.gameState.playerCount) { ito.updatePlayerView(); } else { getEl('ito-check').classList.add('hidden'); getEl('ito-theme').classList.remove('hidden'); ito.drawTheme(); } },
         drawTheme: () => { 
-            getEl('ito-theme-display').textContent = shuffle(themes['ITO'])[0];
+            const themeList = themes['ITO'] || [];
+            const themeText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(themeList)
+                : shuffle(themeList)[0];
+            getEl('ito-theme-display').textContent = themeText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
             scoreBoard.create(getEl('ito-scoreboard'), ito.gameState.players);
         },
         updateScore: (index, delta) => {
@@ -288,10 +365,13 @@ document.addEventListener('DOMContentLoaded', () => {
         init: () => { getEl('ww-setup').classList.remove('hidden'); getEl('ww-check').classList.add('hidden'); getEl('ww-discuss').classList.add('hidden'); getEl('ww-result').classList.add('hidden'); getEl('ww-player-count').value = 4; getEl('ww-time-select').value = 180;},
         startSetup: () => { const playerCount = parseInt(getEl('ww-player-count').value); if(playerCount < 3 || playerCount > 10) { alert("3〜10人で設定してください。"); return; } ww.timeLeft = parseInt(getEl('ww-time-select').value); playerSetup.setup('ww', playerCount, 'page-word-wolf', ww.start); },
         start: (playerNames) => {
-            const themePair = shuffle(themes['ワードウルフ'])[0];
+            const pairList = themes['ワードウルフ'] || [];
+            const themePair = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(pairList)
+                : shuffle(pairList)[0];
             const wolfIndex = Math.floor(Math.random() * playerNames.length);
             ww.gameState = { playerCount: playerNames.length, currentPlayerIndex: 0,
-                players: playerNames.map((name, i) => ({ name, score: 0, role: i === wolfIndex ? 'ウルフ' : '市民', word: i === wolfIndex ? themePair[1] : themePair[0] }))
+                players: playerNames.map((name, i) => ({ name, score: 0, role: i === wolfIndex ? 'ウルフ' : '市民', word: themePair ? (i === wolfIndex ? themePair[1] : themePair[0]) : HIRAGANA_MODE_UNAVAILABLE_TEXT }))
             };
             pages.forEach(p => p.classList.remove('active')); getEl('page-word-wolf').classList.add('active');
             getEl('ww-setup').classList.add('hidden'); getEl('ww-check').classList.remove('hidden'); ww.updatePlayerView();
@@ -345,7 +425,11 @@ document.addEventListener('DOMContentLoaded', () => {
             scoreBoard.create(getEl('qis-scoreboard'), qis.gameState.players);
         },
         newQuestion: () => {
-            getEl('qis-question-display').textContent = shuffle(themes['クイズいいセン行きまSHOW！'])[0];
+            const qList = themes['クイズいいセン行きまSHOW！'] || [];
+            const qText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? pickNoKanji(qList)
+                : shuffle(qList)[0];
+            getEl('qis-question-display').textContent = qText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
             getEl('qis-calc-input').value = '';
             getEl('qis-calc-result').textContent = '';
         },
@@ -481,382 +565,6 @@ document.addEventListener('DOMContentLoaded', () => {
     getEl('mt-draw').addEventListener('click', mt.draw);
     getEl('mt-show-answer').addEventListener('click', mt.showAnswer);
 
-    // =========================
-    // NGワードゲーム
-    // =========================
-    class NgWordGame {
-        constructor(container) {
-            this.container = container;
-            this.timerId = null;
-            this.endAt = 0;
-            this.durationSec = 180;
-            this.bound = false;
-            this.resetAll();
-        }
-
-        resetAll() {
-            this.playerA = localStorage.getItem('ngw-playerA') || 'Player A';
-            this.playerB = localStorage.getItem('ngw-playerB') || 'Player B';
-            this.mode = null;
-            this.ngWordA = '';
-            this.ngWordB = '';
-            this.winner = null;
-        }
-
-        getWordList() {
-            const list = themes && Array.isArray(themes['ng-word']) ? themes['ng-word'] : null;
-            const cleaned = Array.isArray(list) ? list.map((x) => String(x).trim()).filter(Boolean) : [];
-            return cleaned.length ? cleaned : [...DEFAULT_NG_WORDS];
-        }
-
-        init() {
-            if (!this.container) return;
-            this.stopTimer();
-            this.resetAll();
-            this.bindEventsOnce();
-            this.renderMode();
-        }
-
-        bindEventsOnce() {
-            if (this.bound) return;
-            this.bound = true;
-            this.container.addEventListener('click', (e) => {
-                const btn = e.target.closest('button[data-action]');
-                if (!btn) return;
-                e.preventDefault();
-                this.handleAction(String(btn.dataset.action || ''));
-            });
-        }
-
-        escapeHtml(s) {
-            return String(s)
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#39;');
-        }
-
-        formatTime(sec) {
-            const s = Math.max(0, Math.floor(sec));
-            const m = String(Math.floor(s / 60)).padStart(2, '0');
-            const r = String(s % 60).padStart(2, '0');
-            return `${m}:${r}`;
-        }
-
-        pickTwoWords() {
-            const pool = this.getWordList();
-            if (pool.length < 2) return ['(候補不足)','(候補不足)'];
-            const shuffled = shuffle(pool);
-            return [shuffled[0], shuffled[1]];
-        }
-
-        pickOneExcluding(excludeSet) {
-            const pool = this.getWordList();
-            const candidates = pool.filter(w => !excludeSet.has(w));
-            if (candidates.length === 0) return null;
-            return candidates[Math.floor(Math.random() * candidates.length)];
-        }
-
-        passReveal(which) {
-            if (this.mode !== 'random') {
-                alert('パスはランダムモードでのみ使えます。');
-                return;
-            }
-            const pool = this.getWordList();
-            if (pool.length < 2) {
-                alert('NGワード候補が不足しています。\n設定 > NGワード で追加してください。');
-                return;
-            }
-
-            // which=A は Aが「BのNGワード」を見ている（= ngWordB を変更）
-            const targetKey = which === 'A' ? 'ngWordB' : 'ngWordA';
-            const keepKey = which === 'A' ? 'ngWordA' : 'ngWordB';
-            const current = this[targetKey];
-            const keep = this[keepKey];
-
-            const exclude = new Set([current, keep]);
-            const next = this.pickOneExcluding(exclude);
-
-            if (!next) {
-                // 候補が2件しかない場合は入れ替えで「別のお題」を実現する
-                if (pool.length === 2 && this.ngWordA && this.ngWordB && this.ngWordA !== this.ngWordB) {
-                    const tmp = this.ngWordA;
-                    this.ngWordA = this.ngWordB;
-                    this.ngWordB = tmp;
-                    this.renderReveal(which);
-                    return;
-                }
-                alert('別のお題にできません（候補不足）。\n設定 > NGワード で候補を増やしてください。');
-                return;
-            }
-
-            this[targetKey] = next;
-            this.renderReveal(which);
-        }
-
-        setDurationFromUi() {
-            const minutesEl = this.container.querySelector('#ngw-minutes');
-            const minutes = minutesEl ? parseInt(minutesEl.value, 10) : 3;
-            const m = Number.isFinite(minutes) ? Math.max(1, Math.min(60, minutes)) : 3;
-            this.durationSec = m * 60;
-        }
-
-        handleAction(action) {
-            if (action === 'minus-minutes') {
-                const input = this.container.querySelector('#ngw-minutes');
-                if (input) input.stepDown();
-                return;
-            }
-            if (action === 'plus-minutes') {
-                const input = this.container.querySelector('#ngw-minutes');
-                if (input) input.stepUp();
-                return;
-            }
-
-            if (action === 'pass-reveal-A') {
-                this.passReveal('A');
-                return;
-            }
-            if (action === 'pass-reveal-B') {
-                this.passReveal('B');
-                return;
-            }
-
-            const aNameInput = this.container.querySelector('#ngw-player-a');
-            const bNameInput = this.container.querySelector('#ngw-player-b');
-            const aName = (aNameInput ? aNameInput.value : this.playerA).trim() || 'Player A';
-            const bName = (bNameInput ? bNameInput.value : this.playerB).trim() || 'Player B';
-            this.playerA = aName;
-            this.playerB = bName;
-            localStorage.setItem('ngw-playerA', this.playerA);
-            localStorage.setItem('ngw-playerB', this.playerB);
-
-            if (action === 'start-random') {
-                this.mode = 'random';
-                this.setDurationFromUi();
-                const list = this.getWordList();
-                if (list.length < 2) {
-                    alert('NGワード候補が2件以上必要です。\n設定 > NGワード で追加してください。');
-                    return;
-                }
-                const [a, b] = this.pickTwoWords();
-                this.ngWordA = a;
-                this.ngWordB = b;
-                this.renderReveal('A');
-                return;
-            }
-
-            if (action === 'start-custom') {
-                this.mode = 'custom';
-                this.setDurationFromUi();
-                this.renderCustom('A');
-                return;
-            }
-
-            if (action === 'custom-a-done') {
-                const input = this.container.querySelector('#ngw-custom-a');
-                const word = (input ? input.value : '').trim();
-                if (!word) {
-                    alert('NGワードを入力してください');
-                    return;
-                }
-                this.ngWordB = word;
-                this.renderCustom('B');
-                return;
-            }
-
-            if (action === 'custom-b-done') {
-                const input = this.container.querySelector('#ngw-custom-b');
-                const word = (input ? input.value : '').trim();
-                if (!word) {
-                    alert('NGワードを入力してください');
-                    return;
-                }
-                this.ngWordA = word;
-                this.renderReveal('A');
-                return;
-            }
-
-            if (action === 'reveal-next-A') {
-                this.renderReveal('B');
-                return;
-            }
-            if (action === 'reveal-next-B') {
-                this.renderPlay();
-                return;
-            }
-
-            if (action === 'begin-talk') {
-                this.startTimer();
-                return;
-            }
-
-            if (action === 'win-A') {
-                this.winner = 'A';
-                this.stopTimer();
-                this.renderResult();
-                return;
-            }
-            if (action === 'win-B') {
-                this.winner = 'B';
-                this.stopTimer();
-                this.renderResult();
-                return;
-            }
-
-            if (action === 'reset') {
-                this.init();
-                return;
-            }
-        }
-
-        renderMode() {
-            const canRandom = this.getWordList().length >= 2;
-            this.container.innerHTML = `
-                <div class="card">
-                    <div class="card-title">モード選択</div>
-                    <p style="font-size:1rem; font-family:sans-serif;">2人用の会話ゲームです。自分のNGワードは見えず、相手のNGワードだけ確認してから会話します。</p>
-                </div>
-
-                <div class="card">
-                    <div class="card-title">プレイヤー名</div>
-                    <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; font-family:sans-serif;">
-                        <input id="ngw-player-a" type="text" value="${this.escapeHtml(this.playerA)}" style="width:10rem; font-size:1.1rem;" autocomplete="off" />
-                        <input id="ngw-player-b" type="text" value="${this.escapeHtml(this.playerB)}" style="width:10rem; font-size:1.1rem;" autocomplete="off" />
-                    </div>
-                    <p style="font-size:0.85rem; font-family:sans-serif;">名前は端末に保存されます。</p>
-                </div>
-
-                <div class="card">
-                    <div class="card-title">タイマー</div>
-                    <div class="number-input-wrapper">
-                        <button class="num-btn minus" type="button" data-action="minus-minutes">-</button>
-                        <input type="number" id="ngw-minutes" min="1" max="60" value="3">
-                        <button class="num-btn plus" type="button" data-action="plus-minutes">+</button>
-                    </div>
-                    <p style="font-size:0.9rem; font-family:sans-serif; margin-top:0.5rem;">分</p>
-                </div>
-
-                <button class="main-button" data-action="start-random" ${canRandom ? '' : 'disabled'}>${canRandom ? 'ランダムで開始' : 'ランダム（候補不足）'}</button>
-                ${canRandom ? '' : '<p style="font-size:0.85rem; font-family:sans-serif;">※ 設定 > NGワード に2件以上追加してください</p>'}
-                <button class="main-button" data-action="start-custom">カスタムで開始</button>
-            `;
-
-            if (hiraganaMode && hiraganaMode.enabled) hiraganaMode.applyIncremental(this.container);
-        }
-
-        renderCustom(which) {
-            const title = which === 'A' ? `${this.playerA} → ${this.playerB} のNGワード` : `${this.playerB} → ${this.playerA} のNGワード`;
-            const inputId = which === 'A' ? 'ngw-custom-a' : 'ngw-custom-b';
-            const action = which === 'A' ? 'custom-a-done' : 'custom-b-done';
-            this.container.innerHTML = `
-                <div class="card">
-                    <div class="card-title">カスタム入力</div>
-                    <p style="font-size:1rem; font-family:sans-serif;">${this.escapeHtml(title)}</p>
-                    <input id="${inputId}" type="password" style="width:80%; font-size:1.2rem;" autocomplete="off" />
-                </div>
-                <button class="main-button" data-action="${action}">決定</button>
-                <button class="sub-button" data-action="reset">最初に戻る</button>
-            `;
-
-            if (hiraganaMode && hiraganaMode.enabled) hiraganaMode.applyIncremental(this.container);
-        }
-
-        renderReveal(which) {
-            const viewer = which === 'A' ? this.playerA : this.playerB;
-            const word = which === 'A' ? this.ngWordB : this.ngWordA;
-            const action = which === 'A' ? 'reveal-next-A' : 'reveal-next-B';
-            const passAction = which === 'A' ? 'pass-reveal-A' : 'pass-reveal-B';
-            this.container.innerHTML = `
-                <div class="card">
-                    <div class="card-title">確認</div>
-                    <p style="font-size:1rem; font-family:sans-serif;">${this.escapeHtml(viewer)} さんが確認します</p>
-                    <p style="font-size:1rem; font-family:sans-serif;">相手のNGワード：</p>
-                    <p class="large-text">「${this.escapeHtml(word)}」</p>
-                    <p style="font-size:0.85rem; font-family:sans-serif;">※ 自分のNGワードは見えません</p>
-                </div>
-                ${this.mode === 'random' ? `<button class="sub-button" data-action="${passAction}">パス（別のお題）</button>` : ''}
-                <button class="main-button" data-action="${action}">次へ</button>
-            `;
-
-            if (hiraganaMode && hiraganaMode.enabled) hiraganaMode.applyIncremental(this.container);
-        }
-
-        renderPlay() {
-            this.container.innerHTML = `
-                <div class="card">
-                    <div class="card-title">会話スタート</div>
-                    <div id="ngw-timer" class="large-text" style="font-family:monospace; font-size:2.6rem;">${this.formatTime(this.durationSec)}</div>
-                    <button class="main-button" data-action="begin-talk">開始</button>
-                </div>
-
-                <div class="card">
-                    <div class="card-title">勝敗</div>
-                    <button class="main-button" data-action="win-A">Aが言わせた（Bの負け）</button>
-                    <button class="main-button" data-action="win-B">Bが言わせた（Aの負け）</button>
-                    <button class="sub-button" data-action="reset">最初に戻る</button>
-                </div>
-            `;
-
-            if (hiraganaMode && hiraganaMode.enabled) hiraganaMode.applyIncremental(this.container);
-        }
-
-        renderResult() {
-            const winnerName = this.winner === 'A' ? this.playerA : this.playerB;
-            this.container.innerHTML = `
-                <div class="card">
-                    <div class="card-title">結果</div>
-                    <p class="large-text">勝者：${this.escapeHtml(winnerName)}</p>
-                </div>
-
-                <div class="card">
-                    <div class="card-title">NGワード公開</div>
-                    <p style="font-size:1rem; font-family:sans-serif;">${this.escapeHtml(this.playerA)} のNGワード：</p>
-                    <p class="large-text">「${this.escapeHtml(this.ngWordA)}」</p>
-                    <p style="font-size:1rem; font-family:sans-serif; margin-top:1rem;">${this.escapeHtml(this.playerB)} のNGワード：</p>
-                    <p class="large-text">「${this.escapeHtml(this.ngWordB)}」</p>
-                </div>
-
-                <button class="main-button" data-action="reset">もう一度</button>
-            `;
-
-            if (hiraganaMode && hiraganaMode.enabled) hiraganaMode.applyIncremental(this.container);
-        }
-
-        startTimer() {
-            this.stopTimer();
-            this.endAt = Date.now() + this.durationSec * 1000;
-            const tick = () => {
-                const el = this.container.querySelector('#ngw-timer');
-                if (!el) return;
-                const remain = Math.max(0, Math.ceil((this.endAt - Date.now()) / 1000));
-                el.textContent = this.formatTime(remain);
-                if (remain <= 0) this.stopTimer();
-            };
-            tick();
-            this.timerId = setInterval(tick, 250);
-        }
-
-        stopTimer() {
-            if (this.timerId) {
-                clearInterval(this.timerId);
-                this.timerId = null;
-            }
-        }
-    }
-
-    const ngw = {
-        id: 'page-ng-word',
-        game: null,
-        init: () => {
-            ensureNgWordThemes();
-            if (!ngw.game) ngw.game = new NgWordGame(getEl('game-container'));
-            ngw.game.init();
-        }
-    };
-    gameModules[ngw.id] = ngw;
-
     const settings = {
         activeGame: 'ワードスナイパー', activeSubKey: 'normal',
         init: () => { settings.switchTab('ワードスナイパー'); },
@@ -891,49 +599,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadThemes();
     getEl('page-top').classList.add('active');
 
-    // ひらがなモードの切り替え
+    // ひらがなモードの切り替え（小学1年生レベルの漢字以外をひらがなに）
     const hiraganaMode = {
         enabled: false,
-        observer: null,
-        applyTimerId: null,
-        // 「完全変換」ではなく、確実に“漢字を表示しない”ためのフィルタです。
-        // 変換できない漢字は（かんじ）に置換します。
-        replaceKanjiRuns(text) {
-            // CJK統合漢字 + 互換漢字を「（かんじ）」に。
-            // 連続をまとめて置換して、読めない漢字が大量に並ぶのを防ぐ。
-            return String(text).replace(/[\u3400-\u9FFF\uF900-\uFAFF]+/g, '（かんじ）');
-        },
-        normalizeText(text) {
-            let t = String(text);
-            Object.keys(this.textMap).forEach(key => {
-                t = t.replace(new RegExp(key, 'g'), this.textMap[key]);
-            });
-            t = this.replaceKanjiRuns(t);
-            return t;
-        },
-        replaceAttributes(root) {
-            if (!root || !root.querySelectorAll) return;
-            // placeholder / title / aria-label など「説明テキスト」に漢字が残りやすいので対象にする
-            const targets = root.querySelectorAll('[placeholder], [title], [aria-label]');
-            targets.forEach((el) => {
-                if (el.hasAttribute('placeholder')) {
-                    const v = el.getAttribute('placeholder');
-                    const nv = this.normalizeText(v);
-                    if (nv !== v) el.setAttribute('placeholder', nv);
-                }
-                if (el.hasAttribute('title')) {
-                    const v = el.getAttribute('title');
-                    const nv = this.normalizeText(v);
-                    if (nv !== v) el.setAttribute('title', nv);
-                }
-                if (el.hasAttribute('aria-label')) {
-                    const v = el.getAttribute('aria-label');
-                    const nv = this.normalizeText(v);
-                    if (nv !== v) el.setAttribute('aria-label', nv);
-                }
-            });
-        },
         textMap: {
+            // 基本操作
             'オフラインで遊ぶ（ツール）': 'オフラインであそぶ（ツール）',
             'オンラインで対戦': 'オンラインでたいせん',
             '戻る': 'もどる',
@@ -941,72 +611,271 @@ document.addEventListener('DOMContentLoaded', () => {
             'ゲーム開始': 'ゲームかいし',
             '次のカードをめくる': 'つぎのカードをめくる',
             '次のお題へ': 'つぎのおだいへ',
-            '次の問題': 'つぎのもんだい',
             '次のラウンド': 'つぎのラウンド',
             'もう一度遊ぶ': 'もういちどあそぶ',
-            '参加人数': 'さんかにんずう',
-            'プレイ人数': 'プレイにんずう',
+            '新しいお題': 'あたらしいおだい',
+            '確認しました': 'かくにんしました',
+            '確定してゲームを始める': 'かくていしてゲームをはじめる',
+            '確定して次へ': 'かくていしてつぎへ',
+            
+            // NGワードゲーム関連
+            'NGワードゲーム': 'えぬじーわーどげーむ',
+            'ゲームモード': 'げーむもーど',
+            'ゲームモードを選択': 'げーむもーどをえらぶ',
+            'ランダムモード': 'らんだむもーど',
+            'カスタムモード': 'かすたむもーど',
+            'タイマースタート': 'たいまーすたーと',
+            '相手のワードを見る': 'あいてのわーどをみる',
+            '準備完了': 'じゅんびかんりょう',
+            '会話スタート': 'かいわすたーと',
+            'プレイヤー名を入力してください': 'プレイヤーめいをにゅうりょくしてください',
+            'プレイヤー名を入力': 'プレイヤーめいをにゅうりょく',
+            'プレイヤーAの名前': 'プレイヤーAのなまえ',
+            'プレイヤーBの名前': 'プレイヤーBのなまえ',
+            'プレイヤー名を設定': 'プレイヤーめいをせってい',
+            'NGワードを設定してください': 'えぬじーわーどをせっていしてください',
+            'NGワードを入力': 'えぬじーわーどをにゅうりょく',
+            '端末を受け取ってください': 'たんまつをうけとってください',
+            '画面を隠して端末を渡してください': 'がめんをかくしてたんまつをわたしてください',
+            '受け取ったら押す': 'うけとったらおす',
+            '確認する': 'かくにんする',
+            '言ってはいけない言葉': 'いってはいけないことば',
+            'が言ってはいけない言葉': 'がいってはいけないことば',
+            '表示されていません': 'ひょうじされていません',
+            'あなたのNGワードは表示されていません': 'あなたのえぬじーわーどはひょうじされていません',
+            '同じワードは設定できません': 'おなじわーどはせっていできません',
+            '別のワードを入力してください': 'べつのわーどをにゅうりょくしてください',
+            'お互いに相手のNGワードを確認しました': 'おたがいにあいてのえぬじーわーどをかくにんしました',
+            '相手のワードを確認': 'あいてのわーどをかくにん',
+            '決着をつける': 'けっちゃくをつける',
+            '脱落記録': 'だつらくきろく',
+            '脱落': 'だつらく',
+            '生存': 'せいぞん',
+            'ゲーム終了（結果表示）': 'げーむしゅうりょう（けっかひょうじ）',
+            'が言った': 'がいった',
+            '勝利': 'しょうり',
+            'の勝利': 'のしょうり',
+            '引き分け': 'ひきわけ',
+            '両方': 'りょうほう',
+            '勝者': 'しょうしゃ',
+            '敗北': 'はいぼく',
+            '結果': 'けっか',
+            '公開': 'こうかい',
+            'NGワード公開': 'えぬじーわーどこうかい',
+            '相手': 'あいて',
+            '長押し': 'ながおし',
+            
+            // 共通
+            '参加人数': 'さんかにん数',
             'スコア': 'スコア',
             'プレイヤー': 'プレイヤー',
-            'プレイヤー名': 'プレイヤーめい',
-
-            '議論時間': 'ぎろんじかん',
-            '結果発表': 'けっかはっぴょう',
-            '勝者': 'しょうしゃ',
-            '結果': 'けっか',
-            '勝敗': 'しょうはい',
-            '開始': 'かいし',
-            '会話': 'かいわ',
-            '公開': 'こうかい',
-
-            '確認': 'かくにん',
-            '確認します': 'かくにんします',
-            '決定': 'けってい',
-            '次へ': 'つぎへ',
-            '最初に戻る': 'さいしょにもどる',
-
-            'お題の管理': 'おだいのかんり',
-            '追加': 'ついか',
-            '編集': 'へんしゅう',
-            '削除': 'さくじょ',
-            '入出力': 'にゅうしゅつりょく',
-
-            '候補不足': 'こうほぶそく',
-            '設定': 'せってい',
-            'モード選択': 'モードせんたく',
-
-            // 既存のざっくり置換（完全なひらがな化ではありません）
+            'お題': 'おだい',
             '文字': 'もじ',
+            '設定': 'せってい',
+            '追加': 'ついか',
+            '削除': 'さくじょ',
+            '編集': 'へんしゅう',
+            '保存': 'ほぞん',
+            '読み込み': 'よみこみ',
+            '初期化': 'しょきか',
+            '閉じる': 'とじる',
+            '開く': 'ひらく',
+            
+            // 動詞・形容詞
+            '遊ぶ': 'あそぶ',
+            '始める': 'はじめる',
+            '終わる': 'おわる',
+            '使う': 'つかう',
+            '見る': 'みる',
+            '言う': 'いう',
+            '入力': 'にゅうりょく',
+            '表示': 'ひょうじ',
+            '非表示': 'ひひょうじ',
+            '確認': 'かくにん',
+            '選択': 'えらぶ',
+            '設定する': 'せっていする',
+            '変更': 'へんこう',
+            '更新': 'こうしん',
+            
+            // 名詞
+            '各自': 'かくじ',
+            '指定': 'してい',
             '単語': 'たんご',
-            '含': 'ふく',
-            '言': 'い',
             '回答': 'かいとう',
             '連想': 'れんそう',
             '協力': 'きょうりょく',
             '全員': 'ぜんいん',
             '順番': 'じゅんばん',
-            '数字': 'すうじ',
-            '並': 'なら',
+            '数字': 'す字',
             '説明': 'せつめい',
-            '使': 'つか',
-            '乗': 'の',
-            '切': 'き',
-            '抜': 'ぬ',
             '役割': 'やくわり',
-            '与': 'あた',
-            '見破': 'みやぶ',
-            '話': 'はな',
-            '合': 'あ',
             '質問': 'しつもん',
             '範囲': 'はんい',
             '自由': 'じゆう',
-            '数': 'かず',
-            '枚': 'まい',
             '計算': 'けいさん',
             '式': 'しき',
-            '作': 'つく',
-            '各': 'かく',
-            '指定': 'してい'
+            '問題': 'もんだい',
+            '答え': 'こたえ',
+            '正解': 'せいかい',
+            '不正解': 'ふせいかい',
+            '状況': 'じょうきょう',
+            '場合': 'ばあい',
+            '制限時間': 'せいげんじかん',
+            '時間': 'じかん',
+            '秒': 'びょう',
+            '分': 'ふん',
+            '点': 'てん',
+            '得点': 'とくてん',
+            '合計': 'ごうけい',
+            '人数': 'にん数',
+            '番号': 'ばんごう',
+            '名前': 'なまえ',
+            '内容': 'ないよう',
+            '方法': 'ほうほう',
+            '場所': 'ばしょ',
+            '途中': 'とちゅう',
+            '最初': 'さいしょ',
+            '最後': 'さいご',
+            '以上': 'いじょう',
+            '以下': 'いか',
+            '必要': 'ひつよう',
+            '特殊': 'とくしゅ',
+            '通常': 'つうじょう',
+            '全体': 'ぜんたい',
+            '一部': 'いちぶ',
+            '自分': 'じぶん',
+            '他': 'ほか',
+            '全て': 'すべて',
+            
+            // 助詞・接続詞
+            '含む': 'ふくむ',
+            '並べる': 'ならべる',
+            '与える': 'あたえる',
+            '見破る': 'みやぶる',
+            '話し合う': 'はなしあう',
+            '当てる': 'あてる',
+            '作る': 'つくる',
+            '置く': 'おく',
+            '取る': 'とる',
+            '配る': 'くばる',
+            '重ねる': 'かさねる',
+            '並ぶ': 'ならぶ',
+            '切り抜ける': 'きりぬける',
+            '乗り切る': 'のりきる',
+            
+            // ゲーム名
+            'ワードスナイパー': 'わーどすないぱー',
+            'ボブジテン': 'ぼぶじてん',
+            'キャット＆チョコレート': 'きゃっとあんどちょこれーと',
+            'ワードウルフ': 'わーどうるふ',
+            'いいセン行きまSHOW': 'いいせんいきまSHOW',
+            'クイズいいセン行きまSHOW': 'くいずいいせんいきまSHOW',
+            'スタック三目並べ': 'すたっくさんもくならべ',
+            'バトルライン': 'ばとるらいん',
+            
+            // その他固有名詞
+            'ノーマル': 'のーまる',
+            'キッズ': 'きっず',
+            'モード': 'もーど',
+            'カタカナ': 'かたかな',
+            'ひらがな': 'ひらがな',
+            '濁音': 'だくおん',
+            '半濁音': 'はんだくおん',
+            '拗音': 'ようおん',
+            'インポート': 'いんぽーと',
+            'エクスポート': 'えくすぽーと',
+            'リセット': 'りせっと',
+            'ゲームをリセット': 'げーむをりせっと',
+            '次へ': 'つぎへ',
+            
+            // 設定画面関連
+            '新しいお題/アイテムを入力': 'あたらしいおだい/あいてむをにゅうりょく',
+            'CSVファイルでの入出力': 'しーえすぶいふぁいるでのにゅうしゅつりょく',
+            'CSVをインポート': 'しーえすぶいをいんぽーと',
+            'CSVをエクスポート': 'しーえすぶいをえくすぽーと',
+            '初期データに戻す': 'しょきでーたにもどす',
+            '表示中リストのみ': 'ひょうじちゅうりすとのみ',
+            
+            // ITOゲーム関連
+            'プレイ人数を入力してください': 'ぷれいにん数をにゅうりょくしてください',
+            'あなたの数字を見る': 'あなたのす字をみる',
+            
+            // ボブジテン関連
+            '特殊お題': 'とくしゅおだい',
+            '特殊お題あり': 'とくしゅおだいあり',
+            
+            // キャット＆チョコレート関連
+            'イベント': 'いべんと',
+            '必要アイテム数': 'ひつようあいてむ数',
+            '手札アイテム': 'てふだあいてむ',
+            'アイテムを追加': 'あいてむをついか',
+            
+            // ワードウルフ関連
+            '制限時間': 'せいげんじかん',
+            '投票': 'とうひょう',
+            '少数派': 'しょうすうは',
+            '多数派': 'たすうは',
+            
+            // いいセン関連
+            '中央値': 'ちゅうおうち',
+            '最大値': 'さいだいち',
+            '最小値': 'さいしょうち',
+            '平均値': 'へいきんち',
+            
+            // 共通UI
+            'どのモードで遊びますか': 'どのもーどであそびますか',
+            '参加': 'さんか',
+            '現在': 'げんざい',
+            '合計点': 'ごうけいてん',
+            '総計': 'そうけい',
+            '得点': 'とくてん',
+            
+            // 動詞活用形
+            '遊びますか': 'あそびますか',
+            '始めます': 'はじめます',
+            '終わります': 'おわります',
+            '考えます': 'かんがえます',
+            '選びます': 'えらびます',
+            '配ります': 'くばります',
+            '発表されます': 'はっぴょうされます',
+            '表現します': 'ひょうげんします',
+            '説明します': 'せつめいします',
+            '持っています': 'もっています',
+            '見つけます': 'みつけます',
+            '話し合います': 'はなしあいます',
+            '当てます': 'あてます',
+            '作ります': 'つくります',
+            '配置します': 'はいちします',
+            '確保します': 'かくほします',
+            '重ねて置けます': 'かさねておけます',
+            '並べた方': 'ならべたほう',
+            '切り抜けるか': 'きりぬけるか',
+            
+            // よく使う複合語・形容詞
+            '一番早く': 'いちばんはやく',
+            '一番近い': 'いちばんちかい',
+            '一切': 'いっさい',
+            '過半数': 'かはんすう',
+            '連続する': 'れんぞくする',
+            '違う': 'ちがう',
+            '少ない': 'すくない',
+            '多い': 'おおい',
+            '近い': 'ちかい',
+            '遠い': 'とおい',
+            '強い': 'つよい',
+            '弱い': 'よわい',
+            '正しい': 'ただしい',
+            '間違い': 'まちがい',
+            '例えて': 'たとえて',
+            '沿った': 'そった',
+            '縦': 'たて',
+            '横': 'よこ',
+            '斜め': 'ななめ',
+            '戦場': 'せんじょう',
+            '部隊': 'ぶたい',
+            '役': 'やく',
+            '駒': 'こま',
+            'サイズ': 'さいず'
         },
         toggle() {
             this.enabled = !this.enabled;
@@ -1016,40 +885,9 @@ document.addEventListener('DOMContentLoaded', () => {
         apply() {
             document.body.classList.toggle('hiragana-mode', this.enabled);
             if (this.enabled) {
-                this.startObserver();
                 this.replaceText(document.body);
-                this.replaceAttributes(document.body);
             } else {
-                this.stopObserver();
                 location.reload();
-            }
-        },
-        applyIncremental(root) {
-            if (!this.enabled) return;
-            this.replaceText(root);
-            this.replaceAttributes(root);
-        },
-        scheduleApply() {
-            if (!this.enabled) return;
-            if (this.applyTimerId) return;
-            this.applyTimerId = setTimeout(() => {
-                this.applyTimerId = null;
-                this.replaceText(document.body);
-                this.replaceAttributes(document.body);
-            }, 50);
-        },
-        startObserver() {
-            if (this.observer) return;
-            this.observer = new MutationObserver(() => this.scheduleApply());
-            this.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-        },
-        stopObserver() {
-            if (!this.observer) return;
-            this.observer.disconnect();
-            this.observer = null;
-            if (this.applyTimerId) {
-                clearTimeout(this.applyTimerId);
-                this.applyTimerId = null;
             }
         },
         replaceText(element) {
@@ -1059,7 +897,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 nodesToReplace.push(walker.currentNode);
             }
             nodesToReplace.forEach(node => {
-                node.nodeValue = this.normalizeText(node.nodeValue);
+                let text = node.nodeValue;
+                Object.keys(this.textMap).forEach(key => {
+                    text = text.replace(new RegExp(key, 'g'), this.textMap[key]);
+                });
+                node.nodeValue = text;
             });
         }
     };
@@ -1077,29 +919,634 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ルール説明ボタンのイベントハンドラー
     const gameRules = {
-        'word-sniper': 'ワードスナイパー\n\nお題に合った言葉を、指定された文字で始まる言葉で答えるゲームです。\n\n1. お題と文字が表示されます\n2. その文字で始まる、お題に合った言葉を考えます\n3. 一番早く答えた人が得点します',
-        'ito': 'I T O\n\n1～100の数字を使って、テーマに沿った大きさを表現するゲームです。\n\n1. 各プレイヤーに1～100の数字が配られます\n2. テーマが発表されます\n3. 自分の数字の大きさをテーマに例えて表現します\n4. 全員で数字の小さい順に並べます',
-        'bob-jiten': 'ボブジテン\n\nカタカナ語を、カタカナを使わずに説明するゲームです。\n\n1. お題のカタカナ語が表示されます\n2. カタカナを一切使わずに説明します\n3. 他のプレイヤーが当てたら得点',
-        'cat-choco': 'キャット＆チョコレート\n\nピンチな状況を、配られたアイテムで切り抜けるゲームです。\n\n1. イベント（ピンチな状況）が発表されます\n2. 必要なアイテム数が表示されます\n3. 手札のアイテムを使って、どう切り抜けるか説明します',
-        'stack-ttt': 'スタック三目並べ\n\n駒を重ねられる三目並べです。\n\n1. 各プレイヤーはS・M・Lサイズの駒を2個ずつ持っています\n2. 大きい駒は小さい駒の上に重ねて置けます\n3. 先に縦・横・斜めに3つ並べた方の勝ち',
-        'word-wolf': 'ワードウルフ\n\n違うお題を持つ少数派を見つけるゲームです。\n\n1. 各プレイヤーにお題が配られます（1人だけ違うお題）\n2. 制限時間内で自分のお題について話し合います\n3. 投票で少数派（ウルフ）を当てます',
-        'quiz-iisen': 'いいセン行きまSHOW！\n\n答えが数字の問題で、みんなの答えの中央値を当てるゲームです。\n\n1. お題が発表されます\n2. 各プレイヤーが数字で答えます\n3. 中央値に一番近い人が得点',
-        'make-ten': '10パズル\n\n4つの数字を使って、答えが10になる式を作るゲームです。\n\n1. 4つの数字が表示されます\n2. すべての数字を1回ずつ使います\n3. 四則演算（+、-、×、÷）で答えが10になる式を作ります',
-        'ng-word': 'NGワードゲーム\n\n2人用の会話ゲームです。\n\n1. 相手が言ってはいけない言葉（NGワード）をそれぞれ設定します（ランダム/カスタム）。\n2. 確認フェーズで、自分は相手のNGワードだけ確認します（自分のNGワードは見えません）。\n3. 会話を開始し、相手に自分のNGワードを言わせたら勝ちです。',
-        'battle-line': 'バトルライン\n\n9つの戦場で部隊カードを配置し、過半数の戦場を確保するゲームです。\n\n1. 各戦場に3枚ずつカードを配置します\n2. 色と数字で役を作ります（ストレート、フラッシュなど）\n3. 役の強さで戦場を確保し、5つ以上または連続する3つを取れば勝利'
+        'word-sniper': 'わーどすないぱー\n\nおだいに合ったことばを、してい されたもじで始まることばで こたえるげーむです。\n\n1. おだいともじが ひょうじされます\n2. そのもじで始まる、おだいに合ったことばを かんがえます\n3. いちばん早く こたえた人が とくてんします',
+        'ito': 'I T O\n\n1～100のす字を つかって、てーまに そった大きさを ひょうげんするげーむです。\n\n1. かく ぷれいやーに 1～100のす字が くばられます\n2. てーまが はっぴょうされます\n3. じぶんのす字の大きさを てーまに たとえて ひょうげんします\n4. ぜんいんで す字の小さいじゅんに ならべます',
+        'bob-jiten': 'ぼぶじてん\n\nかたかなごを、かたかなを つかわずに せつめいするげーむです。\n\n1. おだいの かたかなごが ひょうじされます\n2. かたかなを いっさい つかわずに せつめいします\n3. ほかの ぷれいやーが あてたら とくてん',
+        'cat-choco': 'きゃっとあんどちょこれーと\n\nぴんちな じょうきょうを、くばられた あいてむで きりぬける げーむです。\n\n1. いべんと（ぴんちな じょうきょう）が はっぴょうされます\n2. ひつような あいてむ数が ひょうじされます\n3. てふだの あいてむを つかって、どう きりぬけるか せつめいします',
+        'stack-ttt': 'すたっく 三もくならべ\n\nこまを かさねられる 三もくならべです。\n\n1. かく ぷれいやーは S・M・L さいずの こまを 2こずつ もっています\n2. 大きい こまは 小さい こまの上に かさねて おけます\n3. さきに たて・よこ・ななめに 3つ ならべた ほうの かち',
+        'word-wolf': 'わーどうるふ\n\nちがう おだいを もつ しょうすうはを みつける げーむです。\n\n1. かく ぷれいやーに おだいが くばられます（1人だけ ちがう おだい）\n2. せいげんじかんないで じぶんの おだいに ついて はなしあいます\n3. とうひょうで しょうすうは（うるふ）を あてます',
+        'quiz-iisen': 'いいせん いきまSHOW！\n\nこたえが す字の もんだいで、みんなの こたえの ちゅうおうちを あてる げーむです。\n\n1. おだいが はっぴょうされます\n2. かく ぷれいやーが す字で こたえます\n3. ちゅうおうちに いちばん ちかい人が とくてん',
+        'make-ten': '10ぱずる\n\n4つのす字を つかって、こたえが 10に なる しきを つくる げーむです。\n\n1. 4つのす字が ひょうじされます\n2. すべてのす字を 1かいずつ つかいます\n3. しそくえんざん（+、-、×、÷）で こたえが 10に なる しきを つくります',
+        'ng-word': 'えぬじーわーど げーむ\n\nかく にんに「いっては いけない ことば（えぬじーわーど）」が 1つ きまります。じぶんの えぬじーわーどは じぶんでは みえません（ほかの ひとからは みえます）。\n\n1. にんずうを きめて、えぬじーわーどを わりあてます（2〜4にん）\n2. たんまつを まわして、かくじが「ほかの ひとの えぬじーわーど」を かくにんします（がめんを かくして わたす）\n3. かいわを すたーとします\n4. えぬじーわーどを いってしまった ひとは だつらく\n5. さいごまで のこった ひとが しょうり',
+        'battle-line': 'ばとるらいん\n\n9つの せんじょうで ぶたい かーどを はいちし、かはんすうの せんじょうを かくほする げーむです。\n\n1. かく せんじょうに 3まいずつ かーどを はいちします\n2. 色とす字で やくを つくります（すとれーと、ふらっしゅなど）\n3. やくの つよさで せんじょうを かくほし、5つ いじょう または れんぞくする 3つを とれば しょうり'
     };
 
     document.querySelectorAll('.rule-button').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const gameKey = btn.dataset.game;
-            const rule = gameRules[gameKey];
+            let rule = gameRules[gameKey];
             if (rule) {
-                const shown = (hiraganaMode && hiraganaMode.enabled)
-                    ? hiraganaMode.normalizeText(rule)
-                    : rule;
-                alert(shown);
+                // ひらがなモードが有効な場合は、そのまま表示（すでにひらがな化済み）
+                // ひらがなモードが無効な場合は、元のテキストを表示
+                if (!hiraganaMode.enabled) {
+                    // 元のテキストマップ（漢字版）
+                    const originalRules = {
+                        'word-sniper': 'ワードスナイパー\n\nお題に合った言葉を、指定された文字で始まる言葉で答えるゲームです。\n\n1. お題と文字が表示されます\n2. その文字で始まる、お題に合った言葉を考えます\n3. 一番早く答えた人が得点します',
+                        'ito': 'I T O\n\n1～100の数字を使って、テーマに沿った大きさを表現するゲームです。\n\n1. 各プレイヤーに1～100の数字が配られます\n2. テーマが発表されます\n3. 自分の数字の大きさをテーマに例えて表現します\n4. 全員で数字の小さい順に並べます',
+                        'bob-jiten': 'ボブジテン\n\nカタカナ語を、カタカナを使わずに説明するゲームです。\n\n1. お題のカタカナ語が表示されます\n2. カタカナを一切使わずに説明します\n3. 他のプレイヤーが当てたら得点',
+                        'cat-choco': 'キャット＆チョコレート\n\nピンチな状況を、配られたアイテムで切り抜けるゲームです。\n\n1. イベント（ピンチな状況）が発表されます\n2. 必要なアイテム数が表示されます\n3. 手札のアイテムを使って、どう切り抜けるか説明します',
+                        'stack-ttt': 'スタック三目並べ\n\n駒を重ねられる三目並べです。\n\n1. 各プレイヤーはS・M・Lサイズの駒を2個ずつ持っています\n2. 大きい駒は小さい駒の上に重ねて置けます\n3. 先に縦・横・斜めに3つ並べた方の勝ち',
+                        'word-wolf': 'ワードウルフ\n\n違うお題を持つ少数派を見つけるゲームです。\n\n1. 各プレイヤーにお題が配られます（1人だけ違うお題）\n2. 制限時間内で自分のお題について話し合います\n3. 投票で少数派（ウルフ）を当てます',
+                        'quiz-iisen': 'いいセン行きまSHOW！\n\n答えが数字の問題で、みんなの答えの中央値を当てるゲームです。\n\n1. お題が発表されます\n2. 各プレイヤーが数字で答えます\n3. 中央値に一番近い人が得点',
+                        'make-ten': '10パズル\n\n4つの数字を使って、答えが10になる式を作るゲームです。\n\n1. 4つの数字が表示されます\n2. すべての数字を1回ずつ使います\n3. 四則演算（+、-、×、÷）で答えが10になる式を作ります',
+                        'ng-word': 'NGワードゲーム\n\n各参加者に「言ってはいけない言葉（NGワード）」が割り当てられ、そのワードを会話中に言ってしまった人が脱落するゲームです。自分のNGワードは自分では見えず、他の人からは見えるのがポイントです。\n\n1. 人数を決めてNGワードを割り当てる（2〜4人）\n2. 端末を回して、各自が「他の人のNGワード」を確認する（画面を隠して渡す）\n3. 会話スタート\n4. NGワードを言ってしまった人は脱落\n5. 最後まで残った人が勝利',
+                        'battle-line': 'バトルライン\n\n9つの戦場で部隊カードを配置し、過半数の戦場を確保するゲームです。\n\n1. 各戦場に3枚ずつカードを配置します\n2. 色と数字で役を作ります（ストレート、フラッシュなど）\n3. 役の強さで戦場を確保し、5つ以上または連続する3つを取れば勝利'
+                    };
+                    rule = originalRules[gameKey] || rule;
+                }
+                alert(rule);
             }
         });
     });
+
+    // =============================================
+    //  NGワードゲーム
+    // =============================================
+    const ngw = {
+        // themes.js が読み込めない/お題が空の場合の保険。ひらがなモードでも使えるように、原則かな表記のみ。
+        fallbackWordList: [
+            'やきにく','すし','らーめん','うどん','そば','ぱすた','ぴざ','はんばーがー','おにぎり','ぱん',
+            'かれー','しちゅー','おむらいす','はんばーぐ','やきとり','たこやき','おこのみやき','おでん','なべ','さらだ',
+            'ぎょうざ','からあげ','てんぷら','やきそば','ちゃーはん','どーなつ','けーき','ぷりん','ぜりー','あいす',
+            'ちょこれーと','くっきー','がむ','ぐみ','らむね','ぽてとちっぷす','ぽっぷこーん','かきごおり','たいやき','くれーぷ',
+            'じゅーす','おちゃ','みず','こーら','さいだー','みるく','ここあ','こーひー','すーぷ','みそしる',
+            'りんご','みかん','いちご','ぶどう','すいか','めろん','ばなな','れもん','もも','なし',
+            'とまと','きゅうり','にんじん','じゃがいも','たまねぎ','ぴーまん','きゃべつ','れたす','ぶろっこりー','こーん',
+            'たまご','ちーず','ばたー','はむ','そーせーじ','つな','さーもん','まぐろ','えび','かに',
+            'ねこ','いぬ','うさぎ','はむすたー','りす','くま','らいおん','とら','きりん','ぞう',
+            'ぺんぎん','ぱんだ','さる','いるか','くじら','かめ','とり','からす','すずめ','はと',
+            'さかな','たこ','いか','かえる','へび','とかげ','かぶとむし','くわがた','ちょう','てんとうむし',
+            'さっかー','やきゅう','ばすけ','てにす','ばどみんとん','どっじぼーる','すいえい','たいそう','らんにんぐ','すけーと',
+            'げーむ','あにめ','まんが','てれび','らじお','えほん','ほん','のーと','えんぴつ','けしごむ',
+            'くれよん','はさみ','のり','せろてーぷ','ものさし','らんどせる','つくえ','いす','とけい','かめら',
+            'すまほ','たぶれっと','ぱそこん','きーぼーど','まうす','りもこん','いやほん','すぴーかー','でんち','らいと',
+            'でんしゃ','ばす','くるま','じてんしゃ','ひこうき','ふね','しんかんせん','たくしー','しょうぼうしゃ','きゅうきゅうしゃ',
+            'こうえん','としょかん','どうぶつえん','すいぞくかん','がっこう','きょうしつ','きゅうしょく','しゅくだい','てすと','うんどうかい',
+            'はなび','おまつり','はろうぃん','くりすます','おしょうがつ','たんじょうび','なつやすみ','ふゆやすみ','はる','なつ',
+            'あき','ふゆ','あめ','はれ','ゆき','かぜ','たいふう','にじ','ほし','つき'
+        ],
+        fallbackWordListHiragana: [],
+        players: [], // { name, ngWord }
+        mode: null, // 'random' | 'custom'
+        customInputIndex: 0,
+        currentCheckIndex: 0,
+        eliminated: [],
+        timerInterval: null,
+        timeLeft: 180,
+
+        init() {
+            this.players = [];
+            this.mode = null;
+            this.customInputIndex = 0;
+            this.currentCheckIndex = 0;
+            this.eliminated = [];
+            this.timeLeft = 180;
+            this.stopTimer();
+
+            // ひらがな用フォールバックが空なら、通常フォールバックと同じにする（かな表記のみを想定）
+            if (!Array.isArray(this.fallbackWordListHiragana) || this.fallbackWordListHiragana.length === 0) {
+                this.fallbackWordListHiragana = [...this.fallbackWordList];
+            }
+
+            this.bindOnce();
+            this.renderPlayerInputs();
+            this.updateSkipButton();
+            this.showScreen('ngw-player-setup');
+        },
+
+        bindOnce() {
+            const root = getEl('page-ng-word');
+            if (!root || root.dataset.ngwListenerAdded) return;
+
+            getEl('ngw-player-count').addEventListener('change', () => this.renderPlayerInputs());
+            getEl('ngw-confirm-names').addEventListener('click', () => this.confirmNames());
+
+            getEl('ngw-random-mode').addEventListener('click', () => this.setupRandomMode());
+            getEl('ngw-custom-mode').addEventListener('click', () => this.setupCustomMode());
+
+            getEl('ngw-custom-next').addEventListener('click', () => this.confirmCustomWord());
+
+            getEl('ngw-pass-next').addEventListener('click', () => this.showCheckScreen());
+
+            getEl('ngw-confirm-check').addEventListener('click', () => this.confirmCheck());
+            getEl('ngw-start-game').addEventListener('click', () => this.startGame());
+            getEl('ngw-skip-topic').addEventListener('click', () => this.skipTopic());
+            getEl('ngw-change-topic').addEventListener('click', () => this.changeTopicDuringCheck());
+            getEl('ngw-timer-start').addEventListener('click', () => this.startTimer());
+            getEl('ngw-finish').addEventListener('click', () => this.finishGame());
+            getEl('ngw-reset').addEventListener('click', () => this.init());
+
+            // 確認フェーズ：長押しで相手のワード一覧を表示
+            this.addLongPress(getEl('ngw-reveal-others'), () => this.showOthersForCurrentPlayer(), () => this.hideOthersDisplay());
+
+            // 画面切り替えのタイミングで残っていた表示を消す保険
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    this.hideOthersDisplay();
+                    this.hideOpponentDisplay();
+                }
+            });
+
+            root.dataset.ngwListenerAdded = 'true';
+        },
+
+        showScreen(screenId) {
+            document.querySelectorAll('#ngw-main > div').forEach(div => div.classList.add('hidden'));
+            getEl(screenId).classList.remove('hidden');
+
+            if (screenId === 'ngw-ready') {
+                this.updateSkipButton();
+            }
+            if (screenId === 'ngw-check') {
+                this.updateChangeTopicButton();
+            }
+        },
+
+        updateSkipButton() {
+            const btn = getEl('ngw-skip-topic');
+            if (!btn) return;
+
+            const shouldShow = (this.mode === 'random' && this.players.length >= 2);
+            btn.classList.toggle('hidden', !shouldShow);
+            btn.disabled = !shouldShow;
+
+            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+                btn.textContent = 'おだいを すきっぷ（さいちゅうせん）';
+            } else {
+                btn.textContent = 'お題をスキップ（再抽選）';
+            }
+        },
+
+        updateChangeTopicButton() {
+            const btn = getEl('ngw-change-topic');
+            if (!btn) return;
+
+            const shouldShow = (this.mode === 'random');
+            btn.classList.toggle('hidden', !shouldShow);
+            btn.disabled = !shouldShow;
+
+            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+                btn.textContent = 'あいての えぬじーわーどを かえる（さいちゅうせん）';
+            } else {
+                btn.textContent = '相手のNGワードを変える（再抽選）';
+            }
+        },
+
+        getRandomSource() {
+            const pool = this.getWordPool();
+            const extras = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+                ? this.fallbackWordListHiragana
+                : this.fallbackWordList;
+            return Array.from(new Set([...(pool || []), ...(extras || [])]));
+        },
+
+        pickNewWord(excludedSet, previousWord) {
+            const source = this.getRandomSource();
+            if (source.length === 0) return null;
+
+            const byUniqueAndDifferent = source.filter(w => !excludedSet.has(w) && w !== previousWord);
+            if (byUniqueAndDifferent.length > 0) return shuffle(byUniqueAndDifferent)[0];
+
+            const byUnique = source.filter(w => !excludedSet.has(w));
+            if (byUnique.length > 0) return shuffle(byUnique)[0];
+
+            const byDifferent = source.filter(w => w !== previousWord);
+            if (byDifferent.length > 0) return shuffle(byDifferent)[0];
+
+            return shuffle(source)[0];
+        },
+
+        rerollAllWords() {
+            const source = this.getRandomSource();
+            if (source.length < this.players.length) {
+                alertByMode(
+                    'お題（NGワード）の数が足りません。設定画面でお題を追加してください。',
+                    'わーどが たりません。せっていがめんで ついかしてください。'
+                );
+                return false;
+            }
+
+            const picked = shuffle(source).slice(0, this.players.length);
+            this.players.forEach((p, i) => p.ngWord = picked[i]);
+            return true;
+        },
+
+        rerollOpponentsWords(viewerIndex) {
+            // viewerIndex（確認している人）自身のNGは変えず、自分以外（相手側）のNGを再抽選する。
+            if (viewerIndex < 0 || viewerIndex >= this.players.length) return false;
+
+            const reserved = new Set();
+            const myWord = this.players[viewerIndex]?.ngWord;
+            if (myWord) reserved.add(myWord);
+
+            for (let i = 0; i < this.players.length; i++) {
+                if (i === viewerIndex) continue;
+
+                const prev = this.players[i]?.ngWord || '';
+                const next = this.pickNewWord(reserved, prev);
+                if (!next) return false;
+                this.players[i].ngWord = next;
+                reserved.add(next);
+            }
+
+            return true;
+        },
+
+        renderPlayerInputs() {
+            const count = parseInt(getEl('ngw-player-count').value, 10);
+            const safeCount = Math.min(4, Math.max(2, isNaN(count) ? 4 : count));
+            getEl('ngw-player-count').value = safeCount;
+
+            const container = getEl('ngw-player-inputs');
+            container.innerHTML = '';
+            for (let i = 0; i < safeCount; i++) {
+                const isHira = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled);
+                const labelText = isHira ? `ぷれいやー${i + 1}` : `プレイヤー${i + 1}`;
+                const placeholderText = isHira ? `ぷれいやー${i + 1}の なまえ` : `プレイヤー${i + 1}の名前`;
+                const wrap = document.createElement('div');
+                wrap.style.margin = '14px 0';
+                wrap.innerHTML = `
+                    <label style="display:block; margin-bottom:5px; font-weight:bold;">${labelText}</label>
+                    <input type="text" id="ngw-player-name-${i}" placeholder="${placeholderText}" style="width: 100%; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px;" value="Player ${i + 1}">
+                `;
+                container.appendChild(wrap);
+            }
+        },
+
+        confirmNames() {
+            const count = parseInt(getEl('ngw-player-count').value, 10);
+            if (isNaN(count) || count < 2 || count > 4) {
+                alertByMode('2〜4人で設定してください。', '2〜4にんで せっていしてください。');
+                return;
+            }
+
+            const names = [];
+            for (let i = 0; i < count; i++) {
+                const input = getEl(`ngw-player-name-${i}`);
+                names.push((input?.value || '').trim() || `Player ${i + 1}`);
+            }
+
+            this.players = names.map(name => ({ name, ngWord: '' }));
+            this.mode = null;
+            this.updateSkipButton();
+            this.showScreen('ngw-mode-select');
+        },
+
+        getWordPool() {
+            const list = themes['NGワードゲーム'];
+            let pool = (Array.isArray(list) && list.length > 0) ? list : this.fallbackWordList;
+            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+                pool = pool.filter(w => !containsKanji(w));
+                if (pool.length === 0) pool = this.fallbackWordListHiragana;
+            }
+            return pool;
+        },
+
+        setupRandomMode() {
+            this.mode = 'random';
+            if (!this.rerollAllWords()) return;
+            this.startCheckFlow();
+        },
+
+        setupCustomMode() {
+            this.mode = 'custom';
+            this.players.forEach(p => p.ngWord = '');
+            this.customInputIndex = 0;
+            getEl('ngw-custom-word').value = '';
+            this.updateCustomInstruction();
+            this.showScreen('ngw-custom-input');
+        },
+
+        skipTopic() {
+            if (this.mode !== 'random') return;
+
+            const ok = confirmByMode(
+                'お題（NGワード）をスキップして再抽選しますか？\n※確認フェーズからやり直します',
+                'おだい（えぬじーわーど）を すきっぷして さいちゅうせんしますか？\n※かくにんふぇーずから やりなおします'
+            );
+            if (!ok) return;
+
+            if (!this.rerollAllWords()) return;
+            this.startCheckFlow();
+        },
+
+        updateCustomInstruction() {
+            const targetIndex = this.customInputIndex;
+            const setterIndex = (targetIndex + 1) % this.players.length;
+            const target = this.players[targetIndex];
+            const setter = this.players[setterIndex];
+            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+                getEl('ngw-custom-instruction').innerHTML = `${target.name}の えぬじーわーどを せっていしてください<br>（${setter.name}が にゅうりょく）`;
+            } else {
+                getEl('ngw-custom-instruction').innerHTML = `${target.name}のNGワードを設定してください<br>（${setter.name}が入力）`;
+            }
+        },
+
+        confirmCustomWord() {
+            const input = getEl('ngw-custom-word').value.trim();
+            if (!input) {
+                alertByMode('NGワードを入力してください', 'えぬじーわーどを にゅうりょくしてください');
+                return;
+            }
+            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && containsKanji(input)) {
+                alert('かんじは つかえません。ひらがな か かたかなで にゅうりょくしてください。');
+                return;
+            }
+            const used = new Set(this.players.map(p => p.ngWord).filter(Boolean));
+            if (used.has(input)) {
+                alertByMode('同じワードは設定できません。別のワードを入力してください。', 'おなじわーどは せっていできません。べつのわーどを にゅうりょくしてください。');
+                return;
+            }
+
+            this.players[this.customInputIndex].ngWord = input;
+            getEl('ngw-custom-word').value = '';
+            this.customInputIndex++;
+
+            if (this.customInputIndex >= this.players.length) {
+                this.startCheckFlow();
+                return;
+            }
+
+            this.updateCustomInstruction();
+        },
+
+        startCheckFlow() {
+            this.currentCheckIndex = 0;
+            this.hideOthersDisplay();
+            this.showPassScreen();
+        },
+
+        showPassScreen() {
+            const current = this.players[this.currentCheckIndex];
+            getEl('ngw-pass-player').textContent = current.name;
+            this.showScreen('ngw-pass');
+        },
+
+        showCheckScreen() {
+            const current = this.players[this.currentCheckIndex];
+            getEl('ngw-check-player').textContent = current.name;
+            this.hideOthersDisplay();
+            this.showScreen('ngw-check');
+        },
+
+        changeTopicDuringCheck() {
+            // ランダムモード中のみ
+            if (this.mode !== 'random') return;
+
+            const ok = confirmByMode(
+                '相手のNGワードを再抽選しますか？\n※あなたが見える相手側のワードが変わります',
+                'あいての えぬじーわーどを さいちゅうせんしますか？\n※あなたが みえる あいてがわの わーどが かわります'
+            );
+            if (!ok) return;
+
+            // 即時に差し替え（確認の順番は維持）
+            const okReroll = this.rerollOpponentsWords(this.currentCheckIndex);
+            if (!okReroll) {
+                alertByMode('再抽選できませんでした。お題が足りないかもしれません。', 'さいちゅうせん できませんでした。');
+                return;
+            }
+
+            // 表示中なら一覧も即更新
+            if (!getEl('ngw-others-display').classList.contains('hidden')) {
+                this.showOthersForCurrentPlayer();
+            }
+            alertByMode('再抽選しました。続けて確認してください。', 'さいちゅうせんしました。つづけて かくにんしてください。');
+        },
+
+        showOthersForCurrentPlayer() {
+            const meIndex = this.currentCheckIndex;
+            const listEl = getEl('ngw-others-list');
+            listEl.innerHTML = '';
+            this.players.forEach((p, i) => {
+                if (i === meIndex) return;
+                const li = document.createElement('li');
+                li.style.padding = '8px 0';
+                li.style.borderBottom = '1px dashed var(--border-color)';
+                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>: ${p.ngWord}`;
+                listEl.appendChild(li);
+            });
+            if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
+            getEl('ngw-others-display').classList.remove('hidden');
+        },
+
+        hideOthersDisplay() {
+            getEl('ngw-others-display').classList.add('hidden');
+        },
+
+        confirmCheck() {
+            this.hideOthersDisplay();
+            this.currentCheckIndex++;
+            if (this.currentCheckIndex < this.players.length) {
+                this.showPassScreen();
+            } else {
+                this.showScreen('ngw-ready');
+            }
+        },
+
+        startGame() {
+            this.eliminated = Array(this.players.length).fill(false);
+            this.timeLeft = 180;
+            this.updateTimerDisplay();
+
+            const timerBtn = getEl('ngw-timer-start');
+            timerBtn.textContent = 'タイマースタート';
+            timerBtn.disabled = false;
+
+            this.renderGamePlayers();
+            this.renderGameCheckButtons();
+            this.renderOutButtons();
+            this.hideOpponentDisplay();
+
+            this.showScreen('ngw-game');
+        },
+
+        renderGamePlayers() {
+            const grid = getEl('ngw-game-players');
+            grid.innerHTML = '';
+            this.players.forEach((p, i) => {
+                const box = document.createElement('div');
+                box.style.textAlign = 'center';
+                box.style.padding = '8px 6px';
+                box.style.border = '2px solid var(--border-color)';
+                box.style.borderRadius = '8px';
+                box.style.background = this.eliminated[i] ? '#ffe5e5' : 'var(--card-bg-color)';
+
+                const status = this.eliminated[i] ? '脱落' : '生存';
+                const statusColor = this.eliminated[i] ? '#d32f2f' : '#2e7d32';
+
+                box.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 4px;">${p.name}</div>
+                    <div style="font-size: 0.95em; color: ${statusColor};">${status}</div>
+                `;
+                grid.appendChild(box);
+            });
+        },
+
+        renderGameCheckButtons() {
+            const container = getEl('ngw-game-check-buttons');
+            container.innerHTML = '';
+
+            this.players.forEach((p, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'sub-button';
+                btn.style.width = '100%';
+                btn.style.marginBottom = '10px';
+                btn.textContent = `${p.name}: 相手のワードを見る（長押し）`;
+                btn.dataset.playerIndex = String(i);
+                container.appendChild(btn);
+
+                this.addLongPress(
+                    btn,
+                    () => this.showOpponentWordsForPlayer(i),
+                    () => this.hideOpponentDisplay()
+                );
+            });
+        },
+
+        showOpponentWordsForPlayer(meIndex) {
+            const listEl = getEl('ngw-opponent-list');
+            listEl.innerHTML = '';
+            this.players.forEach((p, i) => {
+                if (i === meIndex) return;
+                const li = document.createElement('li');
+                li.style.padding = '8px 0';
+                li.style.borderBottom = '1px dashed var(--border-color)';
+                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>: ${p.ngWord}`;
+                listEl.appendChild(li);
+            });
+            if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
+            getEl('ngw-opponent-display').classList.remove('hidden');
+        },
+
+        hideOpponentDisplay() {
+            getEl('ngw-opponent-display').classList.add('hidden');
+        },
+
+        renderOutButtons() {
+            const container = getEl('ngw-out-buttons');
+            container.innerHTML = '';
+            this.players.forEach((p, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'main-button';
+                btn.style.width = '100%';
+                btn.style.margin = '0 0 10px';
+                btn.textContent = `${p.name}が言った（脱落）`;
+                btn.disabled = this.eliminated[i];
+                btn.addEventListener('click', () => this.markOut(i));
+                container.appendChild(btn);
+            });
+        },
+
+        markOut(index) {
+            if (this.eliminated[index]) return;
+            this.eliminated[index] = true;
+            this.renderGamePlayers();
+            this.renderOutButtons();
+
+            const remaining = this.eliminated.filter(v => !v).length;
+            if (remaining <= 1) {
+                const winnerIndex = this.eliminated.findIndex(v => !v);
+                this.declareWinner(winnerIndex);
+            }
+        },
+
+        finishGame() {
+            // 途中終了：残っている人を勝者扱い（複数なら引き分け）
+            const aliveIndexes = this.eliminated.map((v, i) => ({ v, i })).filter(x => !x.v).map(x => x.i);
+            if (aliveIndexes.length === 1) {
+                this.declareWinner(aliveIndexes[0]);
+                return;
+            }
+            this.stopTimer();
+            const aliveNames = aliveIndexes.map(i => this.players[i].name);
+            getEl('ngw-winner').textContent = aliveNames.length === 0 ? '全員脱落（引き分け）' : `引き分け（残り: ${aliveNames.join('、')}）`;
+            this.renderResultList();
+            this.showScreen('ngw-result');
+        },
+
+        declareWinner(winnerIndex) {
+            this.stopTimer();
+
+            if (winnerIndex < 0) {
+                getEl('ngw-winner').textContent = '全員脱落（引き分け）';
+            } else {
+                getEl('ngw-winner').textContent = `${this.players[winnerIndex].name} の勝利！`;
+            }
+
+            this.renderResultList(winnerIndex);
+            this.showScreen('ngw-result');
+        },
+
+        renderResultList(winnerIndex = -1) {
+            const listEl = getEl('ngw-result-list');
+            listEl.innerHTML = '';
+            this.players.forEach((p, i) => {
+                const li = document.createElement('li');
+                li.style.padding = '10px 0';
+                li.style.borderBottom = '1px dashed var(--border-color)';
+                const status = this.eliminated[i] ? '脱落' : '生存';
+                const statusColor = this.eliminated[i] ? '#d32f2f' : '#2e7d32';
+                const winnerMark = i === winnerIndex ? '【勝者】' : '';
+                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>${winnerMark ? ' ' + winnerMark : ''}: <span style="font-size:1.2em;">${p.ngWord}</span> <span style="color:${statusColor};">(${status})</span>`;
+                listEl.appendChild(li);
+            });
+            if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
+        },
+
+        startTimer() {
+            if (this.timerInterval) return;
+
+            this.timerInterval = setInterval(() => {
+                this.timeLeft--;
+                this.updateTimerDisplay();
+                if (this.timeLeft <= 0) {
+                    this.stopTimer();
+                    alert('時間切れです！');
+                }
+            }, 1000);
+
+            const btn = getEl('ngw-timer-start');
+            btn.textContent = '進行中...';
+            btn.disabled = true;
+        },
+
+        stopTimer() {
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+            }
+        },
+
+        updateTimerDisplay() {
+            const minutes = Math.floor(this.timeLeft / 60);
+            const seconds = this.timeLeft % 60;
+            getEl('ngw-timer').textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        },
+
+        addLongPress(el, onPress, onRelease) {
+            if (!el) return;
+            let pressTimer;
+            const delay = 200;
+
+            const start = (e) => {
+                // スクロール抑制（押しっぱなし表示用）
+                if (e && e.type === 'touchstart') e.preventDefault();
+                clearTimeout(pressTimer);
+                pressTimer = setTimeout(() => onPress(), delay);
+            };
+            const end = (e) => {
+                if (e && (e.type === 'touchend' || e.type === 'touchcancel')) e.preventDefault();
+                clearTimeout(pressTimer);
+                onRelease();
+            };
+
+            el.addEventListener('mousedown', start);
+            el.addEventListener('mouseup', end);
+            el.addEventListener('mouseleave', end);
+            el.addEventListener('touchstart', start, { passive: false });
+            el.addEventListener('touchend', end, { passive: false });
+            el.addEventListener('touchcancel', end, { passive: false });
+        }
+    };
 });
