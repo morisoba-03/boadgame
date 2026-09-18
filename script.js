@@ -1,27 +1,37 @@
 // =============================================
-//  みんなのボドゲ - アプリケーションスクリプト (v4.5)
+//  みんなのボドゲ - アプリケーションスクリプト (v5.0)
 // =============================================
 
 document.addEventListener('DOMContentLoaded', () => {
     const getEl = (id) => document.getElementById(id);
-    const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
+
+    // Fisher-Yates。sort(() => Math.random() - 0.5) は分布が偏るため使わない。
+    const shuffle = (array) => {
+        const a = [...array];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    };
+    // 1件だけ引くときに全体をシャッフルしないための入口。
+    const pickOne = (array) => (Array.isArray(array) && array.length > 0)
+        ? array[Math.floor(Math.random() * array.length)]
+        : null;
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+
     const containsKanji = (text) => /[\u3400-\u4DBF\u4E00-\u9FFF]/.test(String(text || ''));
     const HIRAGANA_MODE_UNAVAILABLE_TEXT = 'ひらがなもーどでは ひょうじできない おだいです';
 
-    const alertByMode = (normalText, hiraganaText) => {
-        if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
-            alert(hiraganaText);
-        } else {
-            alert(normalText);
-        }
-    };
+    // hiraganaMode は下で定義されるが、呼ばれるのは常に定義後なので遅延参照で足りる。
+    const isKana = () => hiraganaMode.enabled;
+    const byMode = (normalText, hiraganaText) => (isKana() ? hiraganaText : normalText);
 
-    const confirmByMode = (normalText, hiraganaText) => {
-        if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
-            return confirm(hiraganaText);
-        }
-        return confirm(normalText);
-    };
+    const alertByMode = (normalText, hiraganaText) => alert(byMode(normalText, hiraganaText));
+    const confirmByMode = (normalText, hiraganaText) => confirm(byMode(normalText, hiraganaText));
 
     const pickNoKanji = (list, predicate = () => true) => {
         if (!Array.isArray(list)) return null;
@@ -30,18 +40,47 @@ document.addEventListener('DOMContentLoaded', () => {
             if (Array.isArray(item)) return item.every(v => !containsKanji(v));
             return !containsKanji(item);
         });
-        if (filtered.length === 0) return null;
-        return shuffle(filtered)[0];
+        return pickOne(filtered);
     };
+
+    // ひらがなモードなら漢字を含まないお題だけを、そうでなければ全体から1件引く。
+    const drawTopic = (list) => (isKana() ? pickNoKanji(list) : pickOne(list)) ?? null;
+
+    // 既存ユーザーのお題を失わないよう、キー名は v4.5 時代のまま据え置く。
+    const THEME_STORAGE_KEY = 'bodoge-themes-v4.5';
+    const SCORE_STORAGE_KEY = 'bodoge-scores-v5';
+    const HIRAGANA_STORAGE_KEY = 'hiragana-mode';
+
     let themes = {};
 
     const pages = document.querySelectorAll('.page');
+
+    // 画面を離れても setInterval が回り続けないよう、遷移のたびに全タイマーを止める。
+    const timerOwners = [];
+    const registerTimerOwner = (owner) => timerOwners.push(owner);
+    const stopAllTimers = () => timerOwners.forEach(owner => {
+        try { owner.stopTimer(); } catch (e) { console.warn('Failed to stop a timer.', e); }
+    });
+
+    const showPage = (pageId) => {
+        const target = getEl(pageId);
+        if (!target) {
+            console.error(`Unknown page id: ${pageId}`);
+            return false;
+        }
+        stopAllTimers();
+        pages.forEach(p => p.classList.remove('active'));
+        target.classList.add('active');
+        target.scrollTop = 0;
+        window.scrollTo(0, 0);
+        return true;
+    };
+
     document.body.addEventListener('click', (e) => {
         const button = e.target.closest('button[data-goto]');
         if (button) {
             const pageId = button.dataset.goto;
-            pages.forEach(p => p.classList.remove('active'));
-            getEl(pageId).classList.add('active');
+            if (!showPage(pageId)) return;
             const initFuncs = {
                 'page-ws-mode-select': () => {},
                 'page-word-sniper': () => ws.init(button.dataset.mode),
@@ -64,15 +103,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadThemes() {
         if (typeof initialThemes !== 'undefined') {
-            const storedThemes = localStorage.getItem('bodoge-themes-v4.5');
+            const storedThemes = localStorage.getItem(THEME_STORAGE_KEY);
             const loadedFromStorage = !!storedThemes;
+            let repaired = false;
             try {
                 const parsed = storedThemes ? JSON.parse(storedThemes) : JSON.parse(JSON.stringify(initialThemes));
-                if(!parsed.ワードスナイパー || !parsed.ITO || !parsed.ボブジテン || !parsed['キャット&チョコレート'] || !parsed['ワードウルフ'] || !parsed['クイズいいセン行きまSHOW!'] || !parsed['NGワードゲーム']) throw new Error('Data structure mismatch');
+                if (!parsed || typeof parsed !== 'object') throw new Error('Stored themes are not an object');
+
+                // 欠けているゲームだけ初期データで補う。壊れた1件で全ユーザーお題を捨てない。
+                Object.keys(initialThemes).forEach(key => {
+                    const fallback = initialThemes[key];
+                    const current = parsed[key];
+                    const shapeOk = Array.isArray(fallback)
+                        ? Array.isArray(current)
+                        : (current && typeof current === 'object' && !Array.isArray(current));
+                    if (!shapeOk) {
+                        parsed[key] = JSON.parse(JSON.stringify(fallback));
+                        repaired = true;
+                        console.warn(`Restored missing/invalid theme data for "${key}".`);
+                        return;
+                    }
+                    if (!Array.isArray(fallback)) {
+                        Object.keys(fallback).forEach(subKey => {
+                            if (!Array.isArray(current[subKey])) {
+                                current[subKey] = [...fallback[subKey]];
+                                repaired = true;
+                                console.warn(`Restored missing theme sub-list "${key}.${subKey}".`);
+                            }
+                        });
+                    }
+                });
                 themes = parsed;
             } catch (e) {
                 console.error("Failed to load themes, falling back to initial data.", e);
                 themes = JSON.parse(JSON.stringify(initialThemes));
+                repaired = true;
+            }
+            if (repaired && loadedFromStorage) {
+                localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(themes));
             }
 
             // NGワードは最低200件を保証（保存済みデータが少ない場合に初期データから補完）
@@ -95,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const changed = current.length !== beforeLen;
                 if (changed && loadedFromStorage) {
-                    localStorage.setItem('bodoge-themes-v4.5', JSON.stringify(themes));
+                    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(themes));
                 }
             } catch (e) {
                 console.warn('Failed to ensure minimum NG words.', e);
@@ -109,16 +177,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameModules = {};
 
     getEl('app-container').addEventListener('click', (e) => {
+        const page = e.target.closest('.page');
+        if (!page) return;
+        const game = gameModules[page.id];
+        if (!game) return;
+
         const btn = e.target.closest('.score-btn');
-        if (!btn) return;
-        
-        const pageId = btn.closest('.page').id;
-        const index = parseInt(btn.dataset.index, 10);
-        const delta = parseInt(btn.dataset.delta, 10);
-        
-        const game = gameModules[pageId];
-        if (game && typeof game.updateScore === 'function') {
-            game.updateScore(index, delta);
+        if (btn) {
+            const index = parseInt(btn.dataset.index, 10);
+            const delta = parseInt(btn.dataset.delta, 10);
+            if (typeof game.updateScore === 'function') game.updateScore(index, delta);
+            return;
+        }
+
+        // スコアボードの名前タップで改名（CSS の cursor:pointer が示していた動作）。
+        const nameEl = e.target.closest('.player-name');
+        if (nameEl && typeof game.renamePlayer === 'function') {
+            const index = parseInt(nameEl.dataset.index, 10);
+            game.renamePlayer(index);
         }
     });
 
@@ -130,11 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
             players.forEach((player, index) => {
                 const item = document.createElement('li');
                 item.innerHTML = `
-                    <span class="player-name">${player.name}</span>
+                    <span class="player-name" data-index="${index}" role="button" tabindex="0" title="タップで名前を変更">${escapeHtml(player.name)}</span>
                     <span class="player-score">スコア: ${player.score}</span>
                     <div class="score-controls">
-                        <button class="score-btn minus" data-index="${index}" data-delta="-1">–</button>
-                        <button class="score-btn plus" data-index="${index}" data-delta="1">+</button>
+                        <button class="score-btn minus" data-index="${index}" data-delta="-1" aria-label="${escapeHtml(player.name)} のスコアを1減らす">–</button>
+                        <button class="score-btn plus" data-index="${index}" data-delta="1" aria-label="${escapeHtml(player.name)} のスコアを1増やす">+</button>
                     </div>
                 `;
                 list.appendChild(item);
@@ -143,160 +219,348 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         update(container, players) {
              players.forEach((player, index) => {
-                const scoreEl = container.querySelector(`li:nth-child(${index + 1}) .player-score`);
-                if(scoreEl) scoreEl.textContent = `スコア: ${player.score}`;
+                const row = container.querySelector(`li:nth-child(${index + 1})`);
+                if (!row) return;
+                const scoreEl = row.querySelector('.player-score');
+                if (scoreEl) scoreEl.textContent = `スコア: ${player.score}`;
+                const nameEl = row.querySelector('.player-name');
+                if (nameEl) nameEl.textContent = player.name;
             });
         }
     };
 
-    const ws = { 
-        id: 'page-word-sniper',
-        topicEl: getEl('ws-topic'), charEl: getEl('ws-char'), headerTitle: getEl('ws-header-title'), 
-        mode: 'normal', 
-        chars: { base: ['あ','い','う','え','お','か','き','く','け','こ','さ','し','す','せ','そ','た','ち','つ','て','と','な','に','ぬ','ね','の','は','ひ','ふ','へ','ほ','ま','み','む','め','も','や','ゆ','よ','ら','り','る','れ','ろ','わ','ん'], dakuon: ['が','ぎ','ぐ','げ','ご','ざ','じ','ず','ぜ','ぞ','だ','ぢ','づ','で','ど','ば','び','ぶ','べ','ぼ'], handakuon: ['ぱ','ぴ','ぷ','ぺ','ぽ'], youon: ['きゃ','きゅ','きょ','しゃ','しゅ','しょ','ちゃ','ちゅ','ちょ','にゃ','にゅ','にょ','ひゃ','ひゅ','ひょ','みゃ','みゅ','みょ','りゃ','りゅ','りょ','ぎゃ','ぎゅ','ぎょ','じゃ','じゅ','じょ','びゃ','びゅ','びょ','ぴゃ','ぴゅ','ぴょ'] },
-        gameState: { players: [] },
-        draw: () => { 
-            let charPool = [...ws.chars.base]; 
-            if(getEl('ws-opt-dakuon').checked) charPool.push(...ws.chars.dakuon); 
-            if(getEl('ws-opt-handakuon').checked) charPool.push(...ws.chars.handakuon); 
-            if(getEl('ws-opt-youon').checked) charPool.push(...ws.chars.youon); 
-
-            const modeKey = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && themes['ワードスナイパー']?.kids) ? 'kids' : ws.mode;
-            const topicList = themes['ワードスナイパー']?.[modeKey] || [];
-            const topic = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(topicList)
-                : shuffle(topicList)[0];
-            ws.topicEl.textContent = topic || HIRAGANA_MODE_UNAVAILABLE_TEXT;
-
-            ws.charEl.textContent = shuffle(charPool)[0]; 
-        },
-        init: (mode) => { 
-            if(!mode) return; 
-            ws.mode = mode; 
-            ws.headerTitle.textContent = `ワードスナイパー (${mode === 'normal' ? 'ノーマル' : 'キッズ'})`;
-            getEl('ws-player-count').value = 4;
-            ws.setupPlayers();
-            ws.draw(); 
-        },
-        setupPlayers: () => {
-            const playerCount = parseInt(getEl('ws-player-count').value, 10);
-            ws.gameState.players = Array.from({ length: playerCount }, (_, i) => ({ name: `プレイヤー${i + 1}`, score: 0 }));
-            scoreBoard.create(getEl('ws-scoreboard'), ws.gameState.players);
-        },
-        updateScore: (index, delta) => {
-            ws.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('ws-scoreboard'), ws.gameState.players);
+    // --- スコア永続化と共通スコアボード -------------------------------------
+    const readStoredScores = () => {
+        try {
+            const raw = localStorage.getItem(SCORE_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : {};
+            return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch (e) {
+            console.warn('Failed to read stored scores.', e);
+            return {};
         }
     };
+    const writeStoredScores = (gameId, players) => {
+        try {
+            const all = readStoredScores();
+            all[gameId] = players.map(p => ({ name: p.name, score: p.score }));
+            localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(all));
+        } catch (e) {
+            console.warn('Failed to store scores.', e);
+        }
+    };
+
+    // ws/bj/cc/ito/ww/qis で同じだった setupPlayers / updateScore をここに集約する。
+    const attachScoreboard = (mod, { countId = null, boardId }) => {
+        mod.gameState = mod.gameState || {};
+        mod.gameState.players = mod.gameState.players || [];
+
+        const render = () => scoreBoard.create(getEl(boardId), mod.gameState.players);
+        const persist = () => writeStoredScores(mod.id, mod.gameState.players);
+
+        // 人数を変えても既存プレイヤーの名前とスコアは維持する。
+        mod.setupPlayers = () => {
+            const input = countId ? getEl(countId) : null;
+            const requested = input ? parseInt(input.value, 10) : mod.gameState.players.length;
+            const count = Math.max(1, isNaN(requested) ? 1 : requested);
+            const prev = mod.gameState.players;
+            mod.gameState.players = Array.from({ length: count }, (_, i) => prev[i] || { name: `プレイヤー${i + 1}`, score: 0 });
+            render();
+            persist();
+        };
+
+        // ページに入り直しただけでスコアが消えないよう、保存済みの状態から復帰する。
+        mod.restorePlayers = () => {
+            if (mod.gameState.players.length === 0) {
+                const saved = readStoredScores()[mod.id];
+                if (Array.isArray(saved) && saved.length > 0) {
+                    mod.gameState.players = saved
+                        .filter(p => p && typeof p === 'object')
+                        .map((p, i) => ({ name: String(p.name ?? `プレイヤー${i + 1}`), score: Number(p.score) || 0 }));
+                }
+            }
+            if (countId && mod.gameState.players.length > 0) {
+                getEl(countId).value = mod.gameState.players.length;
+            }
+            mod.setupPlayers();
+        };
+
+        mod.setPlayers = (players) => {
+            mod.gameState.players = players;
+            render();
+            persist();
+        };
+
+        mod.updateScore = (index, delta) => {
+            const player = mod.gameState.players[index];
+            if (!player) return;
+            player.score += delta;
+            scoreBoard.update(getEl(boardId), mod.gameState.players);
+            persist();
+        };
+
+        mod.renamePlayer = (index) => {
+            const player = mod.gameState.players[index];
+            if (!player) return;
+            const next = prompt(byMode('プレイヤー名を入力してください:', 'なまえを にゅうりょくしてください:'), player.name);
+            if (next === null) return;
+            const trimmed = next.trim();
+            if (!trimmed) return;
+            player.name = trimmed;
+            render();
+            persist();
+        };
+
+        mod.resetScores = () => {
+            mod.gameState.players.forEach(p => { p.score = 0; });
+            scoreBoard.update(getEl(boardId), mod.gameState.players);
+            persist();
+        };
+    };
+
+    const ws = {
+        id: 'page-word-sniper',
+        topicEl: getEl('ws-topic'), charEl: getEl('ws-char'), headerTitle: getEl('ws-header-title'),
+        mode: 'normal',
+        chars: { base: ['あ','い','う','え','お','か','き','く','け','こ','さ','し','す','せ','そ','た','ち','つ','て','と','な','に','ぬ','ね','の','は','ひ','ふ','へ','ほ','ま','み','む','め','も','や','ゆ','よ','ら','り','る','れ','ろ','わ','ん'], dakuon: ['が','ぎ','ぐ','げ','ご','ざ','じ','ず','ぜ','ぞ','だ','ぢ','づ','で','ど','ば','び','ぶ','べ','ぼ'], handakuon: ['ぱ','ぴ','ぷ','ぺ','ぽ'], youon: ['きゃ','きゅ','きょ','しゃ','しゅ','しょ','ちゃ','ちゅ','ちょ','にゃ','にゅ','にょ','ひゃ','ひゅ','ひょ','みゃ','みゅ','みょ','りゃ','りゅ','りょ','ぎゃ','ぎゅ','ぎょ','じゃ','じゅ','じょ','びゃ','びゅ','びょ','ぴゃ','ぴゅ','ぴょ'] },
+        gameState: { players: [] },
+        draw: () => {
+            const charPool = [...ws.chars.base];
+            if (getEl('ws-opt-dakuon').checked) charPool.push(...ws.chars.dakuon);
+            if (getEl('ws-opt-handakuon').checked) charPool.push(...ws.chars.handakuon);
+            if (getEl('ws-opt-youon').checked) charPool.push(...ws.chars.youon);
+
+            const modeKey = (isKana() && themes['ワードスナイパー']?.kids) ? 'kids' : ws.mode;
+            ws.topicEl.textContent = drawTopic(themes['ワードスナイパー']?.[modeKey] || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+            ws.charEl.textContent = pickOne(charPool);
+        },
+        init: (mode) => {
+            if (!mode) return;
+            ws.mode = mode;
+            ws.headerTitle.textContent = `ワードスナイパー (${mode === 'normal' ? 'ノーマル' : 'キッズ'})`;
+            ws.restorePlayers();
+            ws.draw();
+        }
+    };
+    attachScoreboard(ws, { countId: 'ws-player-count', boardId: 'ws-scoreboard' });
     gameModules[ws.id] = ws;
-    document.querySelectorAll('#page-word-sniper .ingame-options input').forEach(el => el.addEventListener('change', ws.draw)); 
+    document.querySelectorAll('#page-word-sniper .ingame-options input').forEach(el => el.addEventListener('change', ws.draw));
     getEl('ws-draw').addEventListener('click', ws.draw);
     getEl('ws-player-count').addEventListener('change', ws.setupPlayers);
 
-    const bj = { 
+    const bj = {
         id: 'page-bob-jiten',
         mode: 'normal',
         headerTitle: getEl('bj-header-title'),
         gameState: { players: [] },
-        draw: () => { 
-            const modeKey = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && themes['ボブジテン']?.kids) ? 'kids' : bj.mode;
-            const topicList = themes['ボブジテン']?.[modeKey] || [];
-            const topic = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(topicList)
-                : shuffle(topicList)[0];
-            getEl('bj-topic').textContent = topic || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+        draw: () => {
+            const modeKey = (isKana() && themes['ボブジテン']?.kids) ? 'kids' : bj.mode;
+            getEl('bj-topic').textContent = drawTopic(themes['ボブジテン']?.[modeKey] || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
 
-            if (getEl('bj-opt-special').checked && Math.random() * 100 < 20) { 
-                const specialList = themes['ボブジテン']?.special || [];
-                const special = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                    ? pickNoKanji(specialList)
-                    : shuffle(specialList)[0];
-                getEl('bj-special-topic').textContent = special || HIRAGANA_MODE_UNAVAILABLE_TEXT;
-                getEl('bj-special-card').classList.remove('hidden'); 
-            } else { 
-                getEl('bj-special-card').classList.add('hidden'); 
-            } 
-        }, 
+            if (getEl('bj-opt-special').checked && Math.random() * 100 < 20) {
+                getEl('bj-special-topic').textContent = drawTopic(themes['ボブジテン']?.special || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+                getEl('bj-special-card').classList.remove('hidden');
+            } else {
+                getEl('bj-special-card').classList.add('hidden');
+            }
+        },
         init: (mode) => {
-            if(!mode) return;
+            if (!mode) return;
             bj.mode = mode;
             bj.headerTitle.textContent = `ボブジテン (${mode === 'normal' ? 'ノーマル' : 'キッズ'})`;
-            getEl('bj-player-count').value = 4;
-            bj.setupPlayers();
+            bj.restorePlayers();
             bj.draw();
-        },
-        setupPlayers: () => {
-            const playerCount = parseInt(getEl('bj-player-count').value, 10);
-            bj.gameState.players = Array.from({ length: playerCount }, (_, i) => ({ name: `プレイヤー${i + 1}`, score: 0 }));
-            scoreBoard.create(getEl('bj-scoreboard'), bj.gameState.players);
-        },
-        updateScore: (index, delta) => {
-            bj.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('bj-scoreboard'), bj.gameState.players);
         }
     };
+    attachScoreboard(bj, { countId: 'bj-player-count', boardId: 'bj-scoreboard' });
     gameModules[bj.id] = bj;
-    getEl('bj-draw').addEventListener('click', () => { bj.draw(); }); 
+    getEl('bj-draw').addEventListener('click', () => { bj.draw(); });
     getEl('bj-player-count').addEventListener('change', bj.setupPlayers);
 
-    const cc = { 
+    const cc = {
         id: 'page-cat-choco',
         gameState: { players: [] },
-        draw: () => { 
-            const eventsList = themes['キャット＆チョコレート']?.events || [];
-            const eventText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(eventsList)
-                : shuffle(eventsList)[0];
-            getEl('cc-event').textContent = eventText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
-
-            getEl('cc-item-count').textContent = Math.floor(Math.random() * 3) + 1; 
+        draw: () => {
+            getEl('cc-event').textContent = drawTopic(themes['キャット＆チョコレート']?.events || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+            getEl('cc-item-count').textContent = Math.floor(Math.random() * 3) + 1;
 
             const itemsList = themes['キャット＆チョコレート']?.items || [];
-            const sourceItems = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? (itemsList.filter(t => !containsKanji(t)))
-                : itemsList;
-            const items = shuffle(sourceItems).slice(0, 3); 
-            const handEl = getEl('cc-items-hand'); 
-            handEl.innerHTML = ''; 
-            if (items.length === 0) {
+            const sourceItems = isKana() ? itemsList.filter(t => !containsKanji(t)) : itemsList;
+            const items = shuffle(sourceItems).slice(0, 3);
+            const handEl = getEl('cc-items-hand');
+            handEl.innerHTML = '';
+            const texts = items.length > 0 ? items : [HIRAGANA_MODE_UNAVAILABLE_TEXT];
+            texts.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const p = document.createElement('p');
-                p.textContent = HIRAGANA_MODE_UNAVAILABLE_TEXT;
-                card.appendChild(p);
+                const paragraph = document.createElement('p');
+                paragraph.textContent = item;
+                card.appendChild(paragraph);
                 handEl.appendChild(card);
-            } else {
-                items.forEach(item => { const card = document.createElement('div'); card.className = 'card'; const p = document.createElement('p'); p.textContent = item; card.appendChild(p); handEl.appendChild(card); }); 
-            }
-        }, 
+            });
+        },
         init: () => {
-            getEl('cc-player-count').value = 4;
-            cc.setupPlayers();
+            cc.restorePlayers();
             cc.draw();
-        },
-        setupPlayers: () => {
-            const playerCount = parseInt(getEl('cc-player-count').value, 10);
-            cc.gameState.players = Array.from({ length: playerCount }, (_, i) => ({ name: `プレイヤー${i + 1}`, score: 0 }));
-            scoreBoard.create(getEl('cc-scoreboard'), cc.gameState.players);
-        },
-        updateScore: (index, delta) => {
-            cc.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('cc-scoreboard'), cc.gameState.players);
         }
     };
+    attachScoreboard(cc, { countId: 'cc-player-count', boardId: 'cc-scoreboard' });
     gameModules[cc.id] = cc;
     getEl('cc-draw').addEventListener('click', cc.draw);
     getEl('cc-player-count').addEventListener('change', cc.setupPlayers);
 
-    const sttt = { 
+    const sttt = {
         id: 'page-stack-ttt',
-        boardEl: getEl('sttt-board'), infoEl: getEl('sttt-info'), playerAreas: {1: getEl('sttt-player1-area'), 2: getEl('sttt-player2-area')}, resetBtn: getEl('sttt-reset'), gameState: {}, sizeValue: { S: 1, M: 2, L: 3 }, 
-        init: () => { sttt.gameState = { board: Array(9).fill(null).map(() => []), hands: { 1: {S:2, M:2, L:2}, 2: {S:2, M:2, L:2} }, currentPlayer: 1, selectedPiece: null, gameOver: false, }; sttt.resetBtn.classList.add('hidden'); sttt.boardEl.innerHTML = Array(9).fill(0).map((_, i) => `<div class="sttt-cell" data-index="${i}"></div>`).join(''); sttt.render(); }, 
-        render: () => { sttt.boardEl.querySelectorAll('.sttt-cell').forEach((cell, i) => { cell.innerHTML = ''; const stack = sttt.gameState.board[i]; if (stack.length > 0) { const topPiece = stack[stack.length - 1]; const pieceEl = document.createElement('div'); pieceEl.className = `sttt-piece player${topPiece.player} size-${topPiece.size}`; cell.appendChild(pieceEl); } }); for (const player of [1, 2]) { sttt.playerAreas[player].classList.toggle('active-player', sttt.gameState.currentPlayer === player && !sttt.gameState.gameOver); for (const size of ['S', 'M', 'L']) { const stackEl = document.querySelector(`.sttt-hand-stack[data-player="${player}"][data-size="${size}"]`); stackEl.innerHTML = ''; for (let i = 0; i < sttt.gameState.hands[player][size]; i++) { const pieceEl = document.createElement('div'); pieceEl.className = `sttt-piece player${player} size-${size}`; stackEl.appendChild(pieceEl); } stackEl.classList.toggle('selected', sttt.gameState.selectedPiece?.player === player && sttt.gameState.selectedPiece?.size === size); } } sttt.infoEl.classList.remove('player1', 'player2'); if (sttt.gameState.gameOver) { sttt.infoEl.textContent = `プレイヤー ${sttt.gameState.currentPlayer} の勝ち！`; sttt.infoEl.classList.add(`player${sttt.gameState.currentPlayer}`); sttt.resetBtn.classList.remove('hidden'); } else { sttt.infoEl.textContent = `プレイヤー ${sttt.gameState.currentPlayer} の番です`; sttt.infoEl.classList.add(`player${sttt.gameState.currentPlayer}`); } document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight')); if(sttt.gameState.selectedPiece){ const { size, from, index: fromIndex } = sttt.gameState.selectedPiece; sttt.boardEl.querySelectorAll('.sttt-cell').forEach((cell, i) => { if(from === 'board' && i === fromIndex) return; const stack = sttt.gameState.board[i]; const topPiece = stack.length > 0 ? stack[stack.length - 1] : null; if (!topPiece || sttt.sizeValue[size] > sttt.sizeValue[topPiece.size]) { cell.classList.add('highlight'); } }); } }, 
-        handleClick: (e) => { if (sttt.gameState.gameOver) return; const handStack = e.target.closest('.sttt-hand-stack'); const cell = e.target.closest('.sttt-cell'); if (handStack) { const { player, size } = handStack.dataset; if (sttt.gameState.currentPlayer !== parseInt(player) || sttt.gameState.hands[player][size] === 0) return; if (sttt.gameState.selectedPiece?.from === 'hand' && sttt.gameState.selectedPiece?.size === size) { sttt.gameState.selectedPiece = null; } else { sttt.gameState.selectedPiece = { player: parseInt(player), size, from: 'hand' }; } } else if (cell) { const index = parseInt(cell.dataset.index); const stack = sttt.gameState.board[index]; const topPiece = stack.length > 0 ? stack[stack.length - 1] : null; if (sttt.gameState.selectedPiece) { if (!cell.classList.contains('highlight')) return; const { player, size, from, index: fromIndex } = sttt.gameState.selectedPiece; sttt.gameState.board[index].push({ player, size }); if (from === 'hand') sttt.gameState.hands[player][size]--; if (from === 'board') sttt.gameState.board[fromIndex].pop(); sttt.gameState.selectedPiece = null; if(sttt.checkWin()){ sttt.gameState.gameOver = true; } else { sttt.gameState.currentPlayer = player === 1 ? 2 : 1; } } else { if (topPiece && topPiece.player === sttt.gameState.currentPlayer) { sttt.gameState.selectedPiece = { player: topPiece.player, size: topPiece.size, from: 'board', index }; } } } sttt.render(); }, 
-        checkWin: () => { const p = sttt.gameState.currentPlayer; const b = sttt.gameState.board.map(s => s.length > 0 ? s[s.length-1].player : null); const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; return lines.some(line => line.every(i => b[i] === p)); } 
+        boardEl: getEl('sttt-board'), infoEl: getEl('sttt-info'),
+        playerAreas: { 1: getEl('sttt-player1-area'), 2: getEl('sttt-player2-area') },
+        resetBtn: getEl('sttt-reset'),
+        gameState: {},
+        sizeValue: { S: 1, M: 2, L: 3 },
+        lines: [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]],
+
+        init: () => {
+            sttt.gameState = {
+                board: Array(9).fill(null).map(() => []),
+                hands: { 1: { S: 2, M: 2, L: 2 }, 2: { S: 2, M: 2, L: 2 } },
+                currentPlayer: 1,
+                selectedPiece: null,
+                gameOver: false,
+                winner: null
+            };
+            sttt.resetBtn.classList.add('hidden');
+            sttt.boardEl.innerHTML = Array(9).fill(0).map((_, i) => `<div class="sttt-cell" data-index="${i}"></div>`).join('');
+            sttt.render();
+        },
+
+        topPieces: () => sttt.gameState.board.map(stack => (stack.length > 0 ? stack[stack.length - 1] : null)),
+
+        canCover: (size, targetPiece) => !targetPiece || sttt.sizeValue[size] > sttt.sizeValue[targetPiece.size],
+
+        render: () => {
+            const tops = sttt.topPieces();
+            sttt.boardEl.querySelectorAll('.sttt-cell').forEach((cell, i) => {
+                cell.innerHTML = '';
+                const topPiece = tops[i];
+                if (topPiece) {
+                    const pieceEl = document.createElement('div');
+                    pieceEl.className = `sttt-piece player${topPiece.player} size-${topPiece.size}`;
+                    cell.appendChild(pieceEl);
+                }
+            });
+
+            for (const player of [1, 2]) {
+                sttt.playerAreas[player].classList.toggle('active-player', sttt.gameState.currentPlayer === player && !sttt.gameState.gameOver);
+                for (const size of ['S', 'M', 'L']) {
+                    const stackEl = document.querySelector(`.sttt-hand-stack[data-player="${player}"][data-size="${size}"]`);
+                    stackEl.innerHTML = '';
+                    for (let i = 0; i < sttt.gameState.hands[player][size]; i++) {
+                        const pieceEl = document.createElement('div');
+                        pieceEl.className = `sttt-piece player${player} size-${size}`;
+                        stackEl.appendChild(pieceEl);
+                    }
+                    stackEl.classList.toggle('selected', sttt.gameState.selectedPiece?.player === player && sttt.gameState.selectedPiece?.size === size);
+                }
+            }
+
+            sttt.infoEl.classList.remove('player1', 'player2');
+            if (sttt.gameState.gameOver) {
+                if (sttt.gameState.winner) {
+                    sttt.infoEl.textContent = `プレイヤー ${sttt.gameState.winner} の勝ち！`;
+                    sttt.infoEl.classList.add(`player${sttt.gameState.winner}`);
+                } else {
+                    sttt.infoEl.textContent = '引き分け（動かせる駒がありません）';
+                }
+                sttt.resetBtn.classList.remove('hidden');
+            } else {
+                sttt.infoEl.textContent = `プレイヤー ${sttt.gameState.currentPlayer} の番です`;
+                sttt.infoEl.classList.add(`player${sttt.gameState.currentPlayer}`);
+            }
+
+            document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+            if (sttt.gameState.selectedPiece) {
+                const { size, from, index: fromIndex } = sttt.gameState.selectedPiece;
+                sttt.boardEl.querySelectorAll('.sttt-cell').forEach((cell, i) => {
+                    if (from === 'board' && i === fromIndex) return;
+                    if (sttt.canCover(size, tops[i])) cell.classList.add('highlight');
+                });
+            }
+        },
+
+        handleClick: (e) => {
+            if (sttt.gameState.gameOver) return;
+            const handStack = e.target.closest('.sttt-hand-stack');
+            const cell = e.target.closest('.sttt-cell');
+
+            if (handStack) {
+                const player = parseInt(handStack.dataset.player, 10);
+                const size = handStack.dataset.size;
+                if (sttt.gameState.currentPlayer !== player || sttt.gameState.hands[player][size] === 0) return;
+                const selected = sttt.gameState.selectedPiece;
+                sttt.gameState.selectedPiece = (selected?.from === 'hand' && selected?.size === size)
+                    ? null
+                    : { player, size, from: 'hand' };
+            } else if (cell) {
+                const index = parseInt(cell.dataset.index, 10);
+                if (sttt.gameState.selectedPiece) {
+                    if (!cell.classList.contains('highlight')) return;
+                    const { player, size, from, index: fromIndex } = sttt.gameState.selectedPiece;
+                    sttt.gameState.board[index].push({ player, size });
+                    if (from === 'hand') sttt.gameState.hands[player][size]--;
+                    if (from === 'board') sttt.gameState.board[fromIndex].pop();
+                    sttt.gameState.selectedPiece = null;
+                    sttt.finishTurn(player);
+                } else {
+                    const stack = sttt.gameState.board[index];
+                    const topPiece = stack.length > 0 ? stack[stack.length - 1] : null;
+                    if (topPiece && topPiece.player === sttt.gameState.currentPlayer) {
+                        sttt.gameState.selectedPiece = { player: topPiece.player, size: topPiece.size, from: 'board', index };
+                    }
+                }
+            }
+            sttt.render();
+        },
+
+        finishTurn: (movedBy) => {
+            const winner = sttt.findWinner(movedBy);
+            if (winner) {
+                sttt.gameState.gameOver = true;
+                sttt.gameState.winner = winner;
+                sttt.gameState.currentPlayer = winner;
+                return;
+            }
+            const next = movedBy === 1 ? 2 : 1;
+            if (!sttt.hasLegalMove(next)) {
+                sttt.gameState.gameOver = true;
+                sttt.gameState.winner = null;
+                return;
+            }
+            sttt.gameState.currentPlayer = next;
+        },
+
+        // 駒を動かすと下の駒が現れるため、手番側だけでなく両者の three-in-a-row を見る。
+        findWinner: (movedBy) => {
+            const tops = sttt.topPieces();
+            const winners = new Set();
+            sttt.lines.forEach(line => {
+                const owner = tops[line[0]]?.player;
+                if (owner && line.every(i => tops[i]?.player === owner)) winners.add(owner);
+            });
+            if (winners.size === 0) return null;
+            if (winners.size === 1) return [...winners][0];
+            // 同時に成立したときは、動かした側ではない方の勝ち。
+            return movedBy === 1 ? 2 : 1;
+        },
+
+        hasLegalMove: (player) => {
+            const tops = sttt.topPieces();
+            const canPlaceSomewhere = (size, fromIndex) => tops.some((topPiece, i) => i !== fromIndex && sttt.canCover(size, topPiece));
+            for (const size of ['S', 'M', 'L']) {
+                if (sttt.gameState.hands[player][size] > 0 && canPlaceSomewhere(size, -1)) return true;
+            }
+            return tops.some((topPiece, i) => topPiece && topPiece.player === player && canPlaceSomewhere(topPiece.size, i));
+        }
     };
-    getEl('page-stack-ttt').addEventListener('click', sttt.handleClick); 
+    getEl('page-stack-ttt').addEventListener('click', sttt.handleClick);
     sttt.resetBtn.addEventListener('click', sttt.init);
     getEl('sttt-header-reset').addEventListener('click', sttt.init);
 
@@ -313,8 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 container.appendChild(div);
             }
             getEl('player-setup-back-btn').dataset.goto = fromPage;
-            pages.forEach(p => p.classList.remove('active'));
-            getEl('page-player-setup').classList.add('active');
+            showPage('page-player-setup');
         },
         confirm: () => {
             const names = [];
@@ -327,144 +590,145 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ito = {
         id: 'page-ito',
-        gameState: {},
+        gameState: { players: [] },
         init: () => { getEl('ito-setup').classList.remove('hidden'); getEl('ito-check').classList.add('hidden'); getEl('ito-theme').classList.add('hidden'); getEl('ito-player-count').value = 4; },
-        startSetup: () => { const playerCount = parseInt(getEl('ito-player-count').value); if(playerCount < 2 || playerCount > 10) { alert("2〜10人で設定してください。"); return; } playerSetup.setup('ito', playerCount, 'page-ito', ito.start); },
+        startSetup: () => { const playerCount = parseInt(getEl('ito-player-count').value); if(playerCount < 2 || playerCount > 10) { alertByMode('2〜10人で設定してください。', '2〜10にんで せっていしてください。'); return; } playerSetup.setup('ito', playerCount, 'page-ito', ito.start); },
         start: (playerNames) => {
             const numbers = shuffle([...Array(100).keys()].map(i => i + 1)).slice(0, playerNames.length);
-            ito.gameState = { 
-                playerCount: playerNames.length, 
-                currentPlayerIndex: 0, 
-                players: playerNames.map((name, i) => ({name, score: 0, number: numbers[i]}))
-            };
-            pages.forEach(p => p.classList.remove('active')); getEl('page-ito').classList.add('active');
+            ito.gameState.playerCount = playerNames.length;
+            ito.gameState.currentPlayerIndex = 0;
+            ito.gameState.players = playerNames.map((name, i) => ({ name, score: 0, number: numbers[i] }));
+            showPage('page-ito');
             getEl('ito-setup').classList.add('hidden'); getEl('ito-check').classList.remove('hidden'); ito.updatePlayerView();
         },
         updatePlayerView: () => { getEl('ito-current-player').textContent = ito.gameState.players[ito.gameState.currentPlayerIndex].name; getEl('ito-number-display').classList.add('hidden'); getEl('ito-confirm-number').classList.add('hidden'); getEl('ito-show-number').classList.remove('hidden'); },
         showNumber: () => { getEl('ito-number-display').textContent = ito.gameState.players[ito.gameState.currentPlayerIndex].number; getEl('ito-number-display').classList.remove('hidden'); getEl('ito-confirm-number').classList.remove('hidden'); getEl('ito-show-number').classList.add('hidden'); },
         confirmNumber: () => { ito.gameState.currentPlayerIndex++; if (ito.gameState.currentPlayerIndex < ito.gameState.playerCount) { ito.updatePlayerView(); } else { getEl('ito-check').classList.add('hidden'); getEl('ito-theme').classList.remove('hidden'); ito.drawTheme(); } },
-        drawTheme: () => { 
-            const themeList = themes['ITO'] || [];
-            const themeText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(themeList)
-                : shuffle(themeList)[0];
-            getEl('ito-theme-display').textContent = themeText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
-            scoreBoard.create(getEl('ito-scoreboard'), ito.gameState.players);
-        },
-        updateScore: (index, delta) => {
-            ito.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('ito-scoreboard'), ito.gameState.players);
+        drawTheme: () => {
+            getEl('ito-theme-display').textContent = drawTopic(themes['ITO'] || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+            ito.setPlayers(ito.gameState.players);
         }
     };
+    attachScoreboard(ito, { boardId: 'ito-scoreboard' });
     gameModules[ito.id] = ito;
     getEl('ito-start-setup').addEventListener('click', ito.startSetup); getEl('ito-show-number').addEventListener('click', ito.showNumber); getEl('ito-confirm-number').addEventListener('click', ito.confirmNumber); getEl('ito-new-theme').addEventListener('click', ito.drawTheme); getEl('ito-reset').addEventListener('click', ito.init);
 
     const ww = {
         id: 'page-word-wolf',
-        gameState: {}, timerId: null, timeLeft: 180,
-        init: () => { getEl('ww-setup').classList.remove('hidden'); getEl('ww-check').classList.add('hidden'); getEl('ww-discuss').classList.add('hidden'); getEl('ww-result').classList.add('hidden'); getEl('ww-player-count').value = 4; getEl('ww-time-select').value = 180;},
-        startSetup: () => { const playerCount = parseInt(getEl('ww-player-count').value); if(playerCount < 3 || playerCount > 10) { alert("3〜10人で設定してください。"); return; } ww.timeLeft = parseInt(getEl('ww-time-select').value); playerSetup.setup('ww', playerCount, 'page-word-wolf', ww.start); },
+        gameState: { players: [] }, timerId: null, timeLeft: 180,
+        init: () => {
+            ww.stopTimer();
+            getEl('ww-setup').classList.remove('hidden'); getEl('ww-check').classList.add('hidden'); getEl('ww-discuss').classList.add('hidden'); getEl('ww-result').classList.add('hidden');
+            getEl('ww-player-count').value = 4; getEl('ww-time-select').value = 180;
+        },
+        startSetup: () => { const playerCount = parseInt(getEl('ww-player-count').value); if(playerCount < 3 || playerCount > 10) { alertByMode('3〜10人で設定してください。', '3〜10にんで せっていしてください。'); return; } ww.timeLeft = parseInt(getEl('ww-time-select').value); playerSetup.setup('ww', playerCount, 'page-word-wolf', ww.start); },
         start: (playerNames) => {
-            const pairList = themes['ワードウルフ'] || [];
-            const themePair = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(pairList)
-                : shuffle(pairList)[0];
+            const themePair = drawTopic(themes['ワードウルフ'] || []);
             const wolfIndex = Math.floor(Math.random() * playerNames.length);
-            ww.gameState = { playerCount: playerNames.length, currentPlayerIndex: 0,
-                players: playerNames.map((name, i) => ({ name, score: 0, role: i === wolfIndex ? 'ウルフ' : '市民', word: themePair ? (i === wolfIndex ? themePair[1] : themePair[0]) : HIRAGANA_MODE_UNAVAILABLE_TEXT }))
-            };
-            pages.forEach(p => p.classList.remove('active')); getEl('page-word-wolf').classList.add('active');
+            ww.gameState.playerCount = playerNames.length;
+            ww.gameState.currentPlayerIndex = 0;
+            ww.gameState.players = playerNames.map((name, i) => ({
+                name, score: 0,
+                role: i === wolfIndex ? 'ウルフ' : '市民',
+                word: themePair ? (i === wolfIndex ? themePair[1] : themePair[0]) : HIRAGANA_MODE_UNAVAILABLE_TEXT
+            }));
+            showPage('page-word-wolf');
             getEl('ww-setup').classList.add('hidden'); getEl('ww-check').classList.remove('hidden'); ww.updatePlayerView();
         },
         updatePlayerView: () => { getEl('ww-current-player').textContent = ww.gameState.players[ww.gameState.currentPlayerIndex].name; getEl('ww-word-display').classList.add('hidden'); getEl('ww-confirm-word').classList.add('hidden'); getEl('ww-show-word').classList.remove('hidden'); },
         showWord: () => { getEl('ww-word-display').textContent = ww.gameState.players[ww.gameState.currentPlayerIndex].word; getEl('ww-word-display').classList.remove('hidden'); getEl('ww-confirm-word').classList.remove('hidden'); getEl('ww-show-word').classList.add('hidden'); },
         confirmWord: () => { ww.gameState.currentPlayerIndex++; if (ww.gameState.currentPlayerIndex < ww.gameState.playerCount) { ww.updatePlayerView(); } else { getEl('ww-check').classList.add('hidden'); getEl('ww-discuss').classList.remove('hidden'); ww.resetTimer(); } },
-        resetTimer: () => { clearInterval(ww.timerId); ww.timerId = null; const min = String(Math.floor(ww.timeLeft / 60)).padStart(2, '0'); const sec = String(ww.timeLeft % 60).padStart(2, '0'); getEl('ww-timer').textContent = `${min}:${sec}`; getEl('ww-timer-start').textContent = 'タイマースタート'; },
-        startTimer: () => { if (ww.timerId) { ww.resetTimer(); return; } getEl('ww-timer-start').textContent = 'リセット'; let time = ww.timeLeft; ww.timerId = setInterval(() => { time--; const min = String(Math.floor(time / 60)).padStart(2, '0'); const sec = String(time % 60).padStart(2, '0'); getEl('ww-timer').textContent = `${min}:${sec}`; if (time <= 0) { clearInterval(ww.timerId); ww.timerId = null; getEl('ww-timer-start').textContent = 'タイマースタート'; } }, 1000); },
-        showResult: () => { 
-            clearInterval(ww.timerId); ww.timerId = null; 
-            getEl('ww-discuss').classList.add('hidden'); 
-            getEl('ww-result').classList.remove('hidden'); 
-            const listEl = getEl('ww-result-list'); 
-            listEl.innerHTML = ''; 
-            ww.gameState.players.forEach(p => { 
-                const li = document.createElement('li'); 
-                li.innerHTML = `${p.name}: <span class="role">${p.role}</span> (お題: ${p.word})`; 
-                listEl.appendChild(li); 
-            });
-            scoreBoard.create(getEl('ww-scoreboard'), ww.gameState.players);
+        renderTime: (seconds) => {
+            const min = String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, '0');
+            const sec = String(Math.max(0, seconds) % 60).padStart(2, '0');
+            getEl('ww-timer').textContent = `${min}:${sec}`;
         },
-        updateScore: (index, delta) => {
-            ww.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('ww-scoreboard'), ww.gameState.players);
+        // ページ遷移時にも呼ばれる。止めるだけで表示は触らない。
+        stopTimer: () => {
+            if (ww.timerId) { clearInterval(ww.timerId); ww.timerId = null; }
+            const btn = getEl('ww-timer-start');
+            if (btn) btn.textContent = byMode('タイマースタート', 'たいまーすたーと');
+        },
+        resetTimer: () => { ww.stopTimer(); ww.renderTime(ww.timeLeft); },
+        startTimer: () => {
+            if (ww.timerId) { ww.resetTimer(); return; }
+            let time = ww.timeLeft;
+            ww.renderTime(time);
+            ww.timerId = setInterval(() => {
+                time--;
+                ww.renderTime(time);
+                if (time <= 0) ww.stopTimer();
+            }, 1000);
+            getEl('ww-timer-start').textContent = byMode('リセット', 'りせっと');
+        },
+        showResult: () => {
+            ww.stopTimer();
+            getEl('ww-discuss').classList.add('hidden');
+            getEl('ww-result').classList.remove('hidden');
+            const listEl = getEl('ww-result-list');
+            listEl.innerHTML = '';
+            ww.gameState.players.forEach(p => {
+                const li = document.createElement('li');
+                li.innerHTML = `${escapeHtml(p.name)}: <span class="role">${escapeHtml(p.role)}</span> (お題: ${escapeHtml(p.word)})`;
+                listEl.appendChild(li);
+            });
+            ww.setPlayers(ww.gameState.players);
         }
     };
+    attachScoreboard(ww, { boardId: 'ww-scoreboard' });
+    registerTimerOwner(ww);
     gameModules[ww.id] = ww;
     getEl('ww-start-setup').addEventListener('click', ww.startSetup); getEl('ww-show-word').addEventListener('click', ww.showWord); getEl('ww-confirm-word').addEventListener('click', ww.confirmWord); getEl('ww-show-result').addEventListener('click', ww.showResult); getEl('ww-timer-start').addEventListener('click', ww.startTimer); getEl('ww-reset').addEventListener('click', ww.init);
 
     const qis = {
         id: 'page-quiz-iisen',
-        gameState: {},
-        init: () => { 
+        gameState: { players: [] },
+        init: () => {
             getEl('qis-setup').classList.remove('hidden');
             getEl('qis-game').classList.add('hidden');
-            getEl('qis-player-count').value = 4; 
+            getEl('qis-player-count').value = 4;
         },
-        startSetup: () => { 
-            const playerCount = parseInt(getEl('qis-player-count').value); 
-            if(playerCount < 2) { alert("2人以上で設定してください。"); return; } 
-            playerSetup.setup('qis', playerCount, 'page-quiz-iisen', qis.start); 
+        startSetup: () => {
+            const playerCount = parseInt(getEl('qis-player-count').value);
+            if (playerCount < 2) { alertByMode('2人以上で設定してください。', '2にん いじょうで せっていしてください。'); return; }
+            playerSetup.setup('qis', playerCount, 'page-quiz-iisen', qis.start);
         },
         start: (playerNames) => {
-            qis.gameState.players = playerNames.map(name => ({name, score: 0}));
-            pages.forEach(p => p.classList.remove('active')); 
-            getEl('page-quiz-iisen').classList.add('active');
-            getEl('qis-setup').classList.add('hidden'); 
-            getEl('qis-game').classList.remove('hidden'); 
+            showPage('page-quiz-iisen');
+            getEl('qis-setup').classList.add('hidden');
+            getEl('qis-game').classList.remove('hidden');
             qis.newQuestion();
-            scoreBoard.create(getEl('qis-scoreboard'), qis.gameState.players);
+            qis.setPlayers(playerNames.map(name => ({ name, score: 0 })));
         },
         newQuestion: () => {
-            const qList = themes['クイズいいセン行きまSHOW！'] || [];
-            const qText = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
-                ? pickNoKanji(qList)
-                : shuffle(qList)[0];
-            getEl('qis-question-display').textContent = qText || HIRAGANA_MODE_UNAVAILABLE_TEXT;
+            getEl('qis-question-display').textContent = drawTopic(themes['クイズいいセン行きまSHOW！'] || []) || HIRAGANA_MODE_UNAVAILABLE_TEXT;
             getEl('qis-calc-input').value = '';
             getEl('qis-calc-result').textContent = '';
         },
         calculate: () => {
             const input = getEl('qis-calc-input').value.trim();
             if (input === '') {
-                getEl('qis-calc-result').textContent = '数字を入力してください。';
+                getEl('qis-calc-result').textContent = byMode('数字を入力してください。', 'すうじを にゅうりょくしてください。');
                 return;
             }
             const numbers = input.split(/[\s,，、]+/).map(n => parseFloat(n)).filter(n => !isNaN(n));
             if (numbers.length === 0) {
-                getEl('qis-calc-result').textContent = '有効な数字がありません。';
+                getEl('qis-calc-result').textContent = byMode('有効な数字がありません。', 'つかえる すうじが ありません。');
                 return;
             }
-            numbers.sort((a,b) => a - b);
-            const midIndex = Math.floor((numbers.length - 1) / 2);
-            const median = numbers[midIndex];
-            let resultText = `入力: [${numbers.join(', ')}] --- 中央値は「${median}」です。`;
-            if (numbers.length % 2 === 0 && numbers.length > 0) {
-                const midIndex2 = midIndex + 1;
-                const median2 = numbers[midIndex2];
-                if(median !== median2) {
-                   resultText = `入力: [${numbers.join(', ')}] --- 中央値は「${median}」と「${median2}」です。`;
-                }
-            }
-            getEl('qis-calc-result').textContent = resultText;
-        },
-        updateScore: (index, delta) => {
-            qis.gameState.players[index].score += delta;
-            scoreBoard.update(getEl('qis-scoreboard'), qis.gameState.players);
+            numbers.sort((a, b) => a - b);
+            const lowIndex = Math.floor((numbers.length - 1) / 2);
+            const highIndex = Math.floor(numbers.length / 2);
+            const low = numbers[lowIndex];
+            const high = numbers[highIndex];
+            const medianText = (low === high) ? `「${low}」` : `「${low}」と「${high}」`;
+            getEl('qis-calc-result').textContent = `入力: [${numbers.join(', ')}] --- 中央値は${medianText}です。`;
         },
         resetGame: () => {
             qis.init();
         }
     };
+    attachScoreboard(qis, { boardId: 'qis-scoreboard' });
     gameModules[qis.id] = qis;
     getEl('qis-start-setup').addEventListener('click', qis.startSetup);
     getEl('qis-new-question').addEventListener('click', qis.newQuestion);
@@ -472,94 +736,125 @@ document.addEventListener('DOMContentLoaded', () => {
     getEl('qis-reset').addEventListener('click', qis.resetGame);
 
     const mt = {
-        difficulty: 'easiest', currentNumbers: [],
+        difficulty: 'easiest', currentNumbers: [], currentSolutions: [],
         init: (difficulty) => {
-            if(!difficulty) return;
+            if (!difficulty) return;
             mt.difficulty = difficulty;
-            const modeText = {'easiest': 'もっともかんたん', 'easy': 'かんたん', 'hard': 'むずかしい'}[difficulty];
+            const modeText = { 'easiest': 'もっともかんたん', 'easy': 'かんたん', 'hard': 'むずかしい' }[difficulty];
             getEl('mt-header-title').textContent = `10パズル (${modeText})`;
             mt.draw();
         },
         draw: () => {
+            // 解ける組み合わせが出るまで引き直す。理論上は必ず見つかるが、念のため上限を置く。
+            const MAX_ATTEMPTS = 500;
             let solutions = [];
-            while(solutions.length === 0){
-                mt.currentNumbers = Array(4).fill(0).map(() => Math.floor(Math.random() * 9) + 1);
-                solutions = mt.solve(mt.currentNumbers);
+            let numbers = [];
+            for (let attempt = 0; attempt < MAX_ATTEMPTS && solutions.length === 0; attempt++) {
+                numbers = Array(4).fill(0).map(() => Math.floor(Math.random() * 9) + 1);
+                solutions = mt.solve(numbers);
             }
+            mt.currentNumbers = numbers;
+            mt.currentSolutions = solutions;
+
             const numbersEl = getEl('mt-numbers');
             numbersEl.innerHTML = '';
-            mt.currentNumbers.forEach(num => { const box = document.createElement('div'); box.className = 'mt-number-box'; box.textContent = num; numbersEl.appendChild(box); });
+            mt.currentNumbers.forEach(num => {
+                const box = document.createElement('div');
+                box.className = 'mt-number-box';
+                box.textContent = num;
+                numbersEl.appendChild(box);
+            });
             getEl('mt-answer-area').classList.add('hidden');
-            getEl('mt-show-answer').textContent = '答えを見る';
+            getEl('mt-show-answer').textContent = byMode('答えを見る', 'こたえを みる');
         },
         showAnswer: () => {
             const answerArea = getEl('mt-answer-area');
-            if(!answerArea.classList.contains('hidden')){
+            if (!answerArea.classList.contains('hidden')) {
                 answerArea.classList.add('hidden');
-                getEl('mt-show-answer').textContent = '答えを見る'; return;
+                getEl('mt-show-answer').textContent = byMode('答えを見る', 'こたえを みる');
+                return;
             }
-            const solutions = mt.solve(mt.currentNumbers);
             const listEl = getEl('mt-answer-list');
             listEl.innerHTML = '';
+            const solutions = mt.currentSolutions;
             if (solutions.length > 0) {
                 solutions.forEach(sol => { const li = document.createElement('li'); li.textContent = sol; listEl.appendChild(li); });
             } else {
-                const li = document.createElement('li'); li.textContent = 'この難易度では解けません'; listEl.appendChild(li);
+                const li = document.createElement('li');
+                li.textContent = byMode('この難易度では解けません', 'この なんいどでは とけません');
+                listEl.appendChild(li);
             }
             answerArea.classList.remove('hidden');
-            getEl('mt-show-answer').textContent = '答えを隠す';
+            getEl('mt-show-answer').textContent = byMode('答えを隠す', 'こたえを かくす');
         },
         solve: (numbers) => {
-            let solutions = new Set();
-            const permute = (arr, l, r) => {
-                if (l === r) {
-                    const results = mt.calculate([...arr]);
-                    results.forEach(res => solutions.add(res));
-                } else {
-                    for (let i = l; i <= r; i++) {
-                        [arr[l], arr[i]] = [arr[i], arr[l]];
-                        permute(arr, l + 1, r);
-                        [arr[l], arr[i]] = [arr[i], arr[l]];
-                    }
+            const solutions = new Set();
+            const permute = (arr, l) => {
+                if (l === arr.length - 1) {
+                    mt.calculate(arr).forEach(res => solutions.add(res));
+                    return;
+                }
+                for (let i = l; i < arr.length; i++) {
+                    [arr[l], arr[i]] = [arr[i], arr[l]];
+                    permute(arr, l + 1);
+                    [arr[l], arr[i]] = [arr[i], arr[l]];
                 }
             };
-            permute(numbers, 0, numbers.length - 1);
+            permute([...numbers], 0);
             return Array.from(solutions);
         },
         calculate: (nums) => {
-            const operators = {'easiest': ['+', '-'], 'easy': ['+', '-'], 'hard': ['+', '-', '*', '/']}[mt.difficulty];
+            const operators = { 'easiest': ['+', '-'], 'easy': ['+', '-'], 'hard': ['+', '-', '*', '/'] }[mt.difficulty];
+            const [a, b, c, d] = nums;
             const results = [];
-            const performOp = (a, op, b) => {
-                if (op === '+') return a + b;
-                if (op === '-') return a - b;
-                if (op === '*') return a * b;
-                if (op === '/') return b !== 0 ? a / b : NaN;
+
+            const performOp = (x, op, y) => {
+                if (op === '+') return x + y;
+                if (op === '-') return x - y;
+                if (op === '*') return x * y;
+                if (op === '/') return y !== 0 ? x / y : NaN;
                 return NaN;
             };
+            // もっともかんたんモードでは途中結果がマイナスになる式を使わせない。
+            const valid = (v) => Number.isFinite(v) && !(mt.difficulty === 'easiest' && v < 0);
+            const isTen = (v) => Math.abs(v - 10) < 1e-9;
 
-            for (const op1 of operators) for (const op2 of operators) for (const op3 of operators) {
-                // ((a op1 b) op2 c) op3 d
-                let val_b = performOp(nums[0], op1, nums[1]);
-                if (mt.difficulty === 'easiest' && val_b < 0) continue;
-                if (isNaN(val_b)) continue;
-                let val_c = performOp(val_b, op2, nums[2]);
-                if (mt.difficulty === 'easiest' && val_c < 0) continue;
-                if (isNaN(val_c)) continue;
-                let val_d = performOp(val_c, op3, nums[3]);
-                if (Math.abs(val_d - 10) < 1e-9) results.push(`((${nums[0]}${op1}${nums[1]})${op2}${nums[2]})${op3}${nums[3]}`);
+            // 4数の括弧の入れ方は5通り。以前は2通りしか見ておらず、正解を取りこぼしていた。
+            const shapes = [
+                (o1, o2, o3) => {
+                    const x = performOp(a, o1, b); if (!valid(x)) return null;
+                    const y = performOp(x, o2, c); if (!valid(y)) return null;
+                    return [performOp(y, o3, d), `((${a}${o1}${b})${o2}${c})${o3}${d}`];
+                },
+                (o1, o2, o3) => {
+                    const x = performOp(b, o2, c); if (!valid(x)) return null;
+                    const y = performOp(a, o1, x); if (!valid(y)) return null;
+                    return [performOp(y, o3, d), `(${a}${o1}(${b}${o2}${c}))${o3}${d}`];
+                },
+                (o1, o2, o3) => {
+                    const x = performOp(b, o2, c); if (!valid(x)) return null;
+                    const y = performOp(x, o3, d); if (!valid(y)) return null;
+                    return [performOp(a, o1, y), `${a}${o1}((${b}${o2}${c})${o3}${d})`];
+                },
+                (o1, o2, o3) => {
+                    const x = performOp(c, o3, d); if (!valid(x)) return null;
+                    const y = performOp(b, o2, x); if (!valid(y)) return null;
+                    return [performOp(a, o1, y), `${a}${o1}(${b}${o2}(${c}${o3}${d}))`];
+                },
+                (o1, o2, o3) => {
+                    const x = performOp(a, o1, b); if (!valid(x)) return null;
+                    const y = performOp(c, o3, d); if (!valid(y)) return null;
+                    return [performOp(x, o2, y), `(${a}${o1}${b})${o2}(${c}${o3}${d})`];
+                }
+            ];
 
-                // (a op1 b) op2 (c op3 d)
-                let v1 = performOp(nums[0], op1, nums[1]);
-                if (mt.difficulty === 'easiest' && v1 < 0) continue;
-                if (isNaN(v1)) continue;
-                let v2 = performOp(nums[2], op3, nums[3]);
-                if (mt.difficulty === 'easiest' && v2 < 0) continue;
-                if (isNaN(v2)) continue;
-                
-                let res = performOp(v1, op2, v2);
-                 if (Math.abs(res - 10) < 1e-9) results.push(`(${nums[0]}${op1}${nums[1]})${op2}(${nums[2]}${op3}${nums[3]})`);
+            for (const o1 of operators) for (const o2 of operators) for (const o3 of operators) {
+                for (const shape of shapes) {
+                    const outcome = shape(o1, o2, o3);
+                    if (outcome && valid(outcome[0]) && isTen(outcome[0])) results.push(outcome[1]);
+                }
             }
-            return results.filter(res => !res.includes('NaN'));
+            return results;
         }
     };
     getEl('mt-draw').addEventListener('click', mt.draw);
@@ -568,7 +863,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const settings = {
         activeGame: 'ワードスナイパー', activeSubKey: 'normal',
         init: () => { settings.switchTab('ワードスナイパー'); },
-        renderList: () => { const listEl = getEl('settings-list'); listEl.innerHTML = ''; const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; if(settings.activeGame === 'ワードウルフ') { listData.forEach((theme, index) => { const li = document.createElement('li'); li.innerHTML = `<span class="theme-text">${theme.join(' / ')}</span><div class="theme-actions"><button data-index="${index}" class="edit-btn">編集</button><button data-index="${index}" class="delete-btn">削除</button></div>`; listEl.appendChild(li); }); } else { listData.forEach((theme, index) => { const li = document.createElement('li'); li.innerHTML = `<span class="theme-text">${theme}</span><div class="theme-actions"><button data-index="${index}" class="edit-btn">編集</button><button data-index="${index}" class="delete-btn">削除</button></div>`; listEl.appendChild(li); }); } },
+        currentList: () => {
+            const gameData = themes[settings.activeGame];
+            if (!gameData) return null;
+            const list = settings.activeSubKey ? gameData[settings.activeSubKey] : gameData;
+            return Array.isArray(list) ? list : null;
+        },
+        // ワードウルフだけは1件が [単語A, 単語B] のペアなので表示を分ける。
+        labelFor: (theme, separator = ' / ') => Array.isArray(theme) ? theme.join(separator) : String(theme),
+        renderList: () => {
+            const listEl = getEl('settings-list');
+            listEl.innerHTML = '';
+            const listData = settings.currentList();
+            if (!listData) return;
+            listData.forEach((theme, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="theme-text">${escapeHtml(settings.labelFor(theme))}</span><div class="theme-actions"><button data-index="${index}" class="edit-btn">編集</button><button data-index="${index}" class="delete-btn">削除</button></div>`;
+                listEl.appendChild(li);
+            });
+        },
         switchTab: (gameName) => {
             settings.activeGame = gameName; document.querySelectorAll('#settings-tabs .tab-button').forEach(btn => btn.classList.toggle('active', btn.dataset.game === gameName));
             const subTabsContainer = getEl('settings-sub-tabs'); const gameData = themes[gameName];
@@ -580,12 +893,12 @@ document.addEventListener('DOMContentLoaded', () => {
             settings.renderList();
         },
         switchSubTab: (key) => { settings.activeSubKey = key; document.querySelectorAll('#settings-sub-tabs .sub-tab-button').forEach(btn => btn.classList.toggle('active', btn.dataset.key === key)); settings.renderList(); },
-        saveThemes: () => { localStorage.setItem('bodoge-themes-v4.5', JSON.stringify(themes)); },
-        addNewTheme: () => { const input = getEl('new-theme-input'); const newTheme = input.value.trim(); if (newTheme) { const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; if(settings.activeGame === 'ワードウルフ'){ if(newTheme.split(/[,\s/]+/).length !== 2) { alert('「単語1, 単語2」のように、2つの単語をカンマやスペースで区切って入力してください。'); return; } listData.push(newTheme.split(/[,\s/]+/)); } else { listData.push(newTheme); } settings.saveThemes(); settings.renderList(); input.value = ''; } },
-        editTheme: (index) => { const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; const oldTheme = settings.activeGame === 'ワードウルフ' ? listData[index].join(', ') : listData[index]; const newTheme = prompt('編集してください:', oldTheme); if (newTheme && newTheme.trim() !== oldTheme) { if(settings.activeGame === 'ワードウルフ'){ if(newTheme.split(/[,\s/]+/).length !== 2) { alert('「単語1, 単語2」のように、2つの単語をカンマやスペースで区切って入力してください。'); return; } listData[index] = newTheme.split(/[,\s/]+/); } else { listData[index] = newTheme.trim(); } settings.saveThemes(); settings.renderList(); } },
-        deleteTheme: (index) => { const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; const themeText = settings.activeGame === 'ワードウルフ' ? listData[index].join(' / ') : listData[index]; if (confirm(`「${themeText}」を削除しますか？`)) { listData.splice(index, 1); settings.saveThemes(); settings.renderList(); } },
-        exportCsv: () => { const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; const filename = `${settings.activeGame}${settings.activeSubKey ? '_' + settings.activeSubKey : ''}.csv`; let csvData; if(settings.activeGame === 'ワードウルフ'){ csvData = listData.map(e => e.join(",")).join("\n"); } else { csvData = listData.join("\n"); } const bom = '\uFEFF'; const blob = new Blob([bom + csvData], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", filename); document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); },
-        importCsv: (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { const listData = settings.activeSubKey ? themes[settings.activeGame][settings.activeSubKey] : themes[settings.activeGame]; if(!listData) return; const currentThemes = new Set(listData.map(t => settings.activeGame === 'ワードウルフ' ? t.join(',') : t)); const newThemesRaw = event.target.result.split(/\r\n|\n/).filter(line => line.trim() !== ''); let addedCount = 0; newThemesRaw.forEach(theme => { if(settings.activeGame === 'ワードウルフ'){ const pair = theme.split(','); if(pair.length === 2 && !currentThemes.has(pair.join(','))){ listData.push(pair.map(p => p.trim())); addedCount++; } } else { const trimmedTheme = theme.trim(); if (trimmedTheme && !currentThemes.has(trimmedTheme)) { listData.push(trimmedTheme); addedCount++; } } }); settings.saveThemes(); alert(`${addedCount}件の新しいお題を追加しました！`); settings.renderList(); }; reader.readAsText(file); e.target.value = ''; }
+        saveThemes: () => { localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(themes)); },
+        addNewTheme: () => { const input = getEl('new-theme-input'); const newTheme = input.value.trim(); if (newTheme) { const listData = settings.currentList(); if(!listData) return; if(settings.activeGame === 'ワードウルフ'){ if(newTheme.split(/[,\s/]+/).length !== 2) { alert('「単語1, 単語2」のように、2つの単語をカンマやスペースで区切って入力してください。'); return; } listData.push(newTheme.split(/[,\s/]+/)); } else { listData.push(newTheme); } settings.saveThemes(); settings.renderList(); input.value = ''; } },
+        editTheme: (rawIndex) => { const index = parseInt(rawIndex, 10); const listData = settings.currentList(); if(!listData) return; const oldTheme = settings.labelFor(listData[index], ', '); const newTheme = prompt('編集してください:', oldTheme); if (newTheme && newTheme.trim() !== oldTheme) { if(settings.activeGame === 'ワードウルフ'){ if(newTheme.split(/[,\s/]+/).length !== 2) { alert('「単語1, 単語2」のように、2つの単語をカンマやスペースで区切って入力してください。'); return; } listData[index] = newTheme.split(/[,\s/]+/); } else { listData[index] = newTheme.trim(); } settings.saveThemes(); settings.renderList(); } },
+        deleteTheme: (rawIndex) => { const index = parseInt(rawIndex, 10); const listData = settings.currentList(); if(!listData) return; const themeText = settings.labelFor(listData[index]); if (confirm(`「${themeText}」を削除しますか？`)) { listData.splice(index, 1); settings.saveThemes(); settings.renderList(); } },
+        exportCsv: () => { const listData = settings.currentList(); if(!listData) return; const filename = `${settings.activeGame}${settings.activeSubKey ? '_' + settings.activeSubKey : ''}.csv`; let csvData; if(settings.activeGame === 'ワードウルフ'){ csvData = listData.map(e => e.join(",")).join("\n"); } else { csvData = listData.join("\n"); } const bom = '\uFEFF'; const blob = new Blob([bom + csvData], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", filename); document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); },
+        importCsv: (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { const listData = settings.currentList(); if(!listData) return; const currentThemes = new Set(listData.map(t => settings.activeGame === 'ワードウルフ' ? t.join(',') : t)); const newThemesRaw = event.target.result.split(/\r\n|\n/).filter(line => line.trim() !== ''); let addedCount = 0; newThemesRaw.forEach(theme => { if(settings.activeGame === 'ワードウルフ'){ const pair = theme.split(','); if(pair.length === 2 && !currentThemes.has(pair.join(','))){ listData.push(pair.map(p => p.trim())); addedCount++; } } else { const trimmedTheme = theme.trim(); if (trimmedTheme && !currentThemes.has(trimmedTheme)) { listData.push(trimmedTheme); addedCount++; } } }); settings.saveThemes(); alert(`${addedCount}件の新しいお題を追加しました！`); settings.renderList(); }; reader.readAsText(file); e.target.value = ''; }
     };
     document.querySelectorAll('#settings-tabs .tab-button').forEach(btn => btn.addEventListener('click', () => settings.switchTab(btn.dataset.game)));
     getEl('settings-sub-tabs').addEventListener('click', e => { if(e.target.classList.contains('sub-tab-button')) settings.switchSubTab(e.target.dataset.key) });
@@ -877,38 +1190,76 @@ document.addEventListener('DOMContentLoaded', () => {
             '駒': 'こま',
             'サイズ': 'さいず'
         },
+        // 置換前の原文を覚えておき、モードを戻すときにリロードなしで復元する。
+        originals: new WeakMap(),
+        compiled: null,
+
+        // 「間違い」より先に「違う」が当たると崩れるため、長いキーから順に適用する。
+        rules() {
+            if (!this.compiled) {
+                const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                this.compiled = Object.keys(this.textMap)
+                    .sort((a, b) => b.length - a.length)
+                    .map(key => [new RegExp(escapeRegExp(key), 'g'), this.textMap[key]]);
+            }
+            return this.compiled;
+        },
+
         toggle() {
             this.enabled = !this.enabled;
             this.apply();
-            localStorage.setItem('hiragana-mode', this.enabled);
+            try {
+                localStorage.setItem(HIRAGANA_STORAGE_KEY, String(this.enabled));
+            } catch (e) {
+                console.warn('Failed to store hiragana mode.', e);
+            }
         },
+
         apply() {
             document.body.classList.toggle('hiragana-mode', this.enabled);
             if (this.enabled) {
                 this.replaceText(document.body);
             } else {
-                location.reload();
+                this.restoreText(document.body);
             }
         },
-        replaceText(element) {
+
+        textNodes(element) {
             const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-            const nodesToReplace = [];
-            while (walker.nextNode()) {
-                nodesToReplace.push(walker.currentNode);
-            }
-            nodesToReplace.forEach(node => {
-                let text = node.nodeValue;
-                Object.keys(this.textMap).forEach(key => {
-                    text = text.replace(new RegExp(key, 'g'), this.textMap[key]);
-                });
-                node.nodeValue = text;
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            return nodes;
+        },
+
+        replaceText(element) {
+            const rules = this.rules();
+            this.textNodes(element).forEach(node => {
+                const source = this.originals.has(node) ? this.originals.get(node) : node.nodeValue;
+                let text = source;
+                rules.forEach(([pattern, replacement]) => { text = text.replace(pattern, replacement); });
+                if (text !== node.nodeValue) {
+                    if (!this.originals.has(node)) this.originals.set(node, source);
+                    node.nodeValue = text;
+                }
+            });
+        },
+
+        // ゲーム進行中に切り替えても状態が飛ばないよう、リロードせず原文に戻す。
+        restoreText(element) {
+            this.textNodes(element).forEach(node => {
+                if (this.originals.has(node)) node.nodeValue = this.originals.get(node);
             });
         }
     };
 
     const hiraganaCheckbox = getEl('hiragana-mode-checkbox');
     if (hiraganaCheckbox) {
-        const saved = localStorage.getItem('hiragana-mode');
+        let saved = null;
+        try {
+            saved = localStorage.getItem(HIRAGANA_STORAGE_KEY);
+        } catch (e) {
+            console.warn('Failed to read hiragana mode.', e);
+        }
         if (saved === 'true') {
             hiraganaCheckbox.checked = true;
             hiraganaMode.enabled = true;
@@ -917,48 +1268,93 @@ document.addEventListener('DOMContentLoaded', () => {
         hiraganaCheckbox.addEventListener('change', () => hiraganaMode.toggle());
     }
 
-    // ルール説明ボタンのイベントハンドラー
+    // ルール説明。漢字版とひらがな版を1件ずつ持つ（以前は別マップ2つに分かれていた）。
     const gameRules = {
-        'word-sniper': 'わーどすないぱー\n\nおだいに合ったことばを、してい されたもじで始まることばで こたえるげーむです。\n\n1. おだいともじが ひょうじされます\n2. そのもじで始まる、おだいに合ったことばを かんがえます\n3. いちばん早く こたえた人が とくてんします',
-        'ito': 'I T O\n\n1～100のす字を つかって、てーまに そった大きさを ひょうげんするげーむです。\n\n1. かく ぷれいやーに 1～100のす字が くばられます\n2. てーまが はっぴょうされます\n3. じぶんのす字の大きさを てーまに たとえて ひょうげんします\n4. ぜんいんで す字の小さいじゅんに ならべます',
-        'bob-jiten': 'ぼぶじてん\n\nかたかなごを、かたかなを つかわずに せつめいするげーむです。\n\n1. おだいの かたかなごが ひょうじされます\n2. かたかなを いっさい つかわずに せつめいします\n3. ほかの ぷれいやーが あてたら とくてん',
-        'cat-choco': 'きゃっとあんどちょこれーと\n\nぴんちな じょうきょうを、くばられた あいてむで きりぬける げーむです。\n\n1. いべんと（ぴんちな じょうきょう）が はっぴょうされます\n2. ひつような あいてむ数が ひょうじされます\n3. てふだの あいてむを つかって、どう きりぬけるか せつめいします',
-        'stack-ttt': 'すたっく 三もくならべ\n\nこまを かさねられる 三もくならべです。\n\n1. かく ぷれいやーは S・M・L さいずの こまを 2こずつ もっています\n2. 大きい こまは 小さい こまの上に かさねて おけます\n3. さきに たて・よこ・ななめに 3つ ならべた ほうの かち',
-        'word-wolf': 'わーどうるふ\n\nちがう おだいを もつ しょうすうはを みつける げーむです。\n\n1. かく ぷれいやーに おだいが くばられます（1人だけ ちがう おだい）\n2. せいげんじかんないで じぶんの おだいに ついて はなしあいます\n3. とうひょうで しょうすうは（うるふ）を あてます',
-        'quiz-iisen': 'いいせん いきまSHOW！\n\nこたえが す字の もんだいで、みんなの こたえの ちゅうおうちを あてる げーむです。\n\n1. おだいが はっぴょうされます\n2. かく ぷれいやーが す字で こたえます\n3. ちゅうおうちに いちばん ちかい人が とくてん',
-        'make-ten': '10ぱずる\n\n4つのす字を つかって、こたえが 10に なる しきを つくる げーむです。\n\n1. 4つのす字が ひょうじされます\n2. すべてのす字を 1かいずつ つかいます\n3. しそくえんざん（+、-、×、÷）で こたえが 10に なる しきを つくります',
-        'ng-word': 'えぬじーわーど げーむ\n\nかく にんに「いっては いけない ことば（えぬじーわーど）」が 1つ きまります。じぶんの えぬじーわーどは じぶんでは みえません（ほかの ひとからは みえます）。\n\n1. にんずうを きめて、えぬじーわーどを わりあてます（2〜4にん）\n2. たんまつを まわして、かくじが「ほかの ひとの えぬじーわーど」を かくにんします（がめんを かくして わたす）\n3. かいわを すたーとします\n4. えぬじーわーどを いってしまった ひとは だつらく\n5. さいごまで のこった ひとが しょうり',
-        'battle-line': 'ばとるらいん\n\n9つの せんじょうで ぶたい かーどを はいちし、かはんすうの せんじょうを かくほする げーむです。\n\n1. かく せんじょうに 3まいずつ かーどを はいちします\n2. 色とす字で やくを つくります（すとれーと、ふらっしゅなど）\n3. やくの つよさで せんじょうを かくほし、5つ いじょう または れんぞくする 3つを とれば しょうり'
+        'word-sniper': {
+            ja: 'ワードスナイパー\n\nお題に合った言葉を、指定された文字で始まる言葉で答えるゲームです。\n\n1. お題と文字が表示されます\n2. その文字で始まる、お題に合った言葉を考えます\n3. 一番早く答えた人が得点します',
+            kana: 'わーどすないぱー\n\nおだいに合ったことばを、してい されたもじで始まることばで こたえるげーむです。\n\n1. おだいともじが ひょうじされます\n2. そのもじで始まる、おだいに合ったことばを かんがえます\n3. いちばん早く こたえた人が とくてんします'
+        },
+        'ito': {
+            ja: 'I T O\n\n1～100の数字を使って、テーマに沿った大きさを表現するゲームです。\n\n1. 各プレイヤーに1～100の数字が配られます\n2. テーマが発表されます\n3. 自分の数字の大きさをテーマに例えて表現します\n4. 全員で数字の小さい順に並べます',
+            kana: 'I T O\n\n1～100のす字を つかって、てーまに そった大きさを ひょうげんするげーむです。\n\n1. かく ぷれいやーに 1～100のす字が くばられます\n2. てーまが はっぴょうされます\n3. じぶんのす字の大きさを てーまに たとえて ひょうげんします\n4. ぜんいんで す字の小さいじゅんに ならべます'
+        },
+        'bob-jiten': {
+            ja: 'ボブジテン\n\nカタカナ語を、カタカナを使わずに説明するゲームです。\n\n1. お題のカタカナ語が表示されます\n2. カタカナを一切使わずに説明します\n3. 他のプレイヤーが当てたら得点',
+            kana: 'ぼぶじてん\n\nかたかなごを、かたかなを つかわずに せつめいするげーむです。\n\n1. おだいの かたかなごが ひょうじされます\n2. かたかなを いっさい つかわずに せつめいします\n3. ほかの ぷれいやーが あてたら とくてん'
+        },
+        'cat-choco': {
+            ja: 'キャット＆チョコレート\n\nピンチな状況を、配られたアイテムで切り抜けるゲームです。\n\n1. イベント（ピンチな状況）が発表されます\n2. 必要なアイテム数が表示されます\n3. 手札のアイテムを使って、どう切り抜けるか説明します',
+            kana: 'きゃっとあんどちょこれーと\n\nぴんちな じょうきょうを、くばられた あいてむで きりぬける げーむです。\n\n1. いべんと（ぴんちな じょうきょう）が はっぴょうされます\n2. ひつような あいてむ数が ひょうじされます\n3. てふだの あいてむを つかって、どう きりぬけるか せつめいします'
+        },
+        'stack-ttt': {
+            ja: 'スタック三目並べ\n\n駒を重ねられる三目並べです。\n\n1. 各プレイヤーはS・M・Lサイズの駒を2個ずつ持っています\n2. 大きい駒は小さい駒の上に重ねて置けます\n3. 先に縦・横・斜めに3つ並べた方の勝ち',
+            kana: 'すたっく 三もくならべ\n\nこまを かさねられる 三もくならべです。\n\n1. かく ぷれいやーは S・M・L さいずの こまを 2こずつ もっています\n2. 大きい こまは 小さい こまの上に かさねて おけます\n3. さきに たて・よこ・ななめに 3つ ならべた ほうの かち'
+        },
+        'word-wolf': {
+            ja: 'ワードウルフ\n\n違うお題を持つ少数派を見つけるゲームです。\n\n1. 各プレイヤーにお題が配られます（1人だけ違うお題）\n2. 制限時間内で自分のお題について話し合います\n3. 投票で少数派（ウルフ）を当てます',
+            kana: 'わーどうるふ\n\nちがう おだいを もつ しょうすうはを みつける げーむです。\n\n1. かく ぷれいやーに おだいが くばられます（1人だけ ちがう おだい）\n2. せいげんじかんないで じぶんの おだいに ついて はなしあいます\n3. とうひょうで しょうすうは（うるふ）を あてます'
+        },
+        'quiz-iisen': {
+            ja: 'いいセン行きまSHOW！\n\n答えが数字の問題で、みんなの答えの中央値を当てるゲームです。\n\n1. お題が発表されます\n2. 各プレイヤーが数字で答えます\n3. 中央値に一番近い人が得点',
+            kana: 'いいせん いきまSHOW！\n\nこたえが す字の もんだいで、みんなの こたえの ちゅうおうちを あてる げーむです。\n\n1. おだいが はっぴょうされます\n2. かく ぷれいやーが す字で こたえます\n3. ちゅうおうちに いちばん ちかい人が とくてん'
+        },
+        'make-ten': {
+            ja: '10パズル\n\n4つの数字を使って、答えが10になる式を作るゲームです。\n\n1. 4つの数字が表示されます\n2. すべての数字を1回ずつ使います\n3. 四則演算（+、-、×、÷）で答えが10になる式を作ります',
+            kana: '10ぱずる\n\n4つのす字を つかって、こたえが 10に なる しきを つくる げーむです。\n\n1. 4つのす字が ひょうじされます\n2. すべてのす字を 1かいずつ つかいます\n3. しそくえんざん（+、-、×、÷）で こたえが 10に なる しきを つくります'
+        },
+        'ng-word': {
+            ja: 'NGワードゲーム\n\n各参加者に「言ってはいけない言葉（NGワード）」が割り当てられ、そのワードを会話中に言ってしまった人が脱落するゲームです。自分のNGワードは自分では見えず、他の人からは見えるのがポイントです。\n\n1. 人数を決めてNGワードを割り当てる（2〜4人）\n2. 端末を回して、各自が「他の人のNGワード」を確認する（画面を隠して渡す）\n3. 会話スタート\n4. NGワードを言ってしまった人は脱落\n5. 最後まで残った人が勝利',
+            kana: 'えぬじーわーど げーむ\n\nかく にんに「いっては いけない ことば（えぬじーわーど）」が 1つ きまります。じぶんの えぬじーわーどは じぶんでは みえません（ほかの ひとからは みえます）。\n\n1. にんずうを きめて、えぬじーわーどを わりあてます（2〜4にん）\n2. たんまつを まわして、かくじが「ほかの ひとの えぬじーわーど」を かくにんします（がめんを かくして わたす）\n3. かいわを すたーとします\n4. えぬじーわーどを いってしまった ひとは だつらく\n5. さいごまで のこった ひとが しょうり'
+        },
     };
+
+    // alert() はスマホで読みづらいため、専用モーダルで表示する。
+    const ruleModal = {
+        overlay: getEl('rule-modal'),
+        titleEl: getEl('rule-modal-title'),
+        bodyEl: getEl('rule-modal-body'),
+        closeBtn: getEl('rule-modal-close'),
+        lastFocused: null,
+
+        open(text) {
+            const [title, ...rest] = text.split('\n');
+            this.titleEl.textContent = title;
+            this.bodyEl.textContent = rest.join('\n').trim();
+            this.lastFocused = document.activeElement;
+            this.overlay.classList.remove('hidden');
+            this.closeBtn.focus();
+        },
+
+        close() {
+            this.overlay.classList.add('hidden');
+            if (this.lastFocused && typeof this.lastFocused.focus === 'function') this.lastFocused.focus();
+        },
+
+        isOpen() {
+            return !this.overlay.classList.contains('hidden');
+        }
+    };
+
+    if (ruleModal.overlay) {
+        ruleModal.closeBtn.addEventListener('click', () => ruleModal.close());
+        ruleModal.overlay.addEventListener('click', (e) => {
+            if (e.target === ruleModal.overlay) ruleModal.close();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && ruleModal.isOpen()) ruleModal.close();
+        });
+    }
 
     document.querySelectorAll('.rule-button').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const gameKey = btn.dataset.game;
-            let rule = gameRules[gameKey];
-            if (rule) {
-                // ひらがなモードが有効な場合は、そのまま表示（すでにひらがな化済み）
-                // ひらがなモードが無効な場合は、元のテキストを表示
-                if (!hiraganaMode.enabled) {
-                    // 元のテキストマップ（漢字版）
-                    const originalRules = {
-                        'word-sniper': 'ワードスナイパー\n\nお題に合った言葉を、指定された文字で始まる言葉で答えるゲームです。\n\n1. お題と文字が表示されます\n2. その文字で始まる、お題に合った言葉を考えます\n3. 一番早く答えた人が得点します',
-                        'ito': 'I T O\n\n1～100の数字を使って、テーマに沿った大きさを表現するゲームです。\n\n1. 各プレイヤーに1～100の数字が配られます\n2. テーマが発表されます\n3. 自分の数字の大きさをテーマに例えて表現します\n4. 全員で数字の小さい順に並べます',
-                        'bob-jiten': 'ボブジテン\n\nカタカナ語を、カタカナを使わずに説明するゲームです。\n\n1. お題のカタカナ語が表示されます\n2. カタカナを一切使わずに説明します\n3. 他のプレイヤーが当てたら得点',
-                        'cat-choco': 'キャット＆チョコレート\n\nピンチな状況を、配られたアイテムで切り抜けるゲームです。\n\n1. イベント（ピンチな状況）が発表されます\n2. 必要なアイテム数が表示されます\n3. 手札のアイテムを使って、どう切り抜けるか説明します',
-                        'stack-ttt': 'スタック三目並べ\n\n駒を重ねられる三目並べです。\n\n1. 各プレイヤーはS・M・Lサイズの駒を2個ずつ持っています\n2. 大きい駒は小さい駒の上に重ねて置けます\n3. 先に縦・横・斜めに3つ並べた方の勝ち',
-                        'word-wolf': 'ワードウルフ\n\n違うお題を持つ少数派を見つけるゲームです。\n\n1. 各プレイヤーにお題が配られます（1人だけ違うお題）\n2. 制限時間内で自分のお題について話し合います\n3. 投票で少数派（ウルフ）を当てます',
-                        'quiz-iisen': 'いいセン行きまSHOW！\n\n答えが数字の問題で、みんなの答えの中央値を当てるゲームです。\n\n1. お題が発表されます\n2. 各プレイヤーが数字で答えます\n3. 中央値に一番近い人が得点',
-                        'make-ten': '10パズル\n\n4つの数字を使って、答えが10になる式を作るゲームです。\n\n1. 4つの数字が表示されます\n2. すべての数字を1回ずつ使います\n3. 四則演算（+、-、×、÷）で答えが10になる式を作ります',
-                        'ng-word': 'NGワードゲーム\n\n各参加者に「言ってはいけない言葉（NGワード）」が割り当てられ、そのワードを会話中に言ってしまった人が脱落するゲームです。自分のNGワードは自分では見えず、他の人からは見えるのがポイントです。\n\n1. 人数を決めてNGワードを割り当てる（2〜4人）\n2. 端末を回して、各自が「他の人のNGワード」を確認する（画面を隠して渡す）\n3. 会話スタート\n4. NGワードを言ってしまった人は脱落\n5. 最後まで残った人が勝利',
-                        'battle-line': 'バトルライン\n\n9つの戦場で部隊カードを配置し、過半数の戦場を確保するゲームです。\n\n1. 各戦場に3枚ずつカードを配置します\n2. 色と数字で役を作ります（ストレート、フラッシュなど）\n3. 役の強さで戦場を確保し、5つ以上または連続する3つを取れば勝利'
-                    };
-                    rule = originalRules[gameKey] || rule;
-                }
-                alert(rule);
-            }
+            const rule = gameRules[btn.dataset.game];
+            if (!rule) return;
+            const text = byMode(rule.ja, rule.kana);
+            if (ruleModal.overlay) ruleModal.open(text); else alert(text);
         });
     });
+
 
     // =============================================
     //  NGワードゲーム
@@ -1071,7 +1467,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('hidden', !shouldShow);
             btn.disabled = !shouldShow;
 
-            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+            if (isKana()) {
                 btn.textContent = 'おだいを すきっぷ（さいちゅうせん）';
             } else {
                 btn.textContent = 'お題をスキップ（再抽選）';
@@ -1086,7 +1482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('hidden', !shouldShow);
             btn.disabled = !shouldShow;
 
-            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+            if (isKana()) {
                 btn.textContent = 'あいての えぬじーわーどを かえる（さいちゅうせん）';
             } else {
                 btn.textContent = '相手のNGワードを変える（再抽選）';
@@ -1095,7 +1491,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         getRandomSource() {
             const pool = this.getWordPool();
-            const extras = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled)
+            const extras = isKana()
                 ? this.fallbackWordListHiragana
                 : this.fallbackWordList;
             return Array.from(new Set([...(pool || []), ...(extras || [])]));
@@ -1161,14 +1557,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const container = getEl('ngw-player-inputs');
             container.innerHTML = '';
             for (let i = 0; i < safeCount; i++) {
-                const isHira = (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled);
+                const isHira = isKana();
                 const labelText = isHira ? `ぷれいやー${i + 1}` : `プレイヤー${i + 1}`;
                 const placeholderText = isHira ? `ぷれいやー${i + 1}の なまえ` : `プレイヤー${i + 1}の名前`;
                 const wrap = document.createElement('div');
                 wrap.style.margin = '14px 0';
                 wrap.innerHTML = `
-                    <label style="display:block; margin-bottom:5px; font-weight:bold;">${labelText}</label>
-                    <input type="text" id="ngw-player-name-${i}" placeholder="${placeholderText}" style="width: 100%; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px;" value="Player ${i + 1}">
+                    <label class="ngw-player-label" for="ngw-player-name-${i}">${escapeHtml(labelText)}</label>
+                    <input type="text" id="ngw-player-name-${i}" class="ngw-player-input" placeholder="${escapeHtml(placeholderText)}" value="${escapeHtml(labelText)}">
                 `;
                 container.appendChild(wrap);
             }
@@ -1196,7 +1592,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getWordPool() {
             const list = themes['NGワードゲーム'];
             let pool = (Array.isArray(list) && list.length > 0) ? list : this.fallbackWordList;
-            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
+            if (isKana()) {
                 pool = pool.filter(w => !containsKanji(w));
                 if (pool.length === 0) pool = this.fallbackWordListHiragana;
             }
@@ -1236,11 +1632,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const setterIndex = (targetIndex + 1) % this.players.length;
             const target = this.players[targetIndex];
             const setter = this.players[setterIndex];
-            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled) {
-                getEl('ngw-custom-instruction').innerHTML = `${target.name}の えぬじーわーどを せっていしてください<br>（${setter.name}が にゅうりょく）`;
-            } else {
-                getEl('ngw-custom-instruction').innerHTML = `${target.name}のNGワードを設定してください<br>（${setter.name}が入力）`;
-            }
+            const targetName = escapeHtml(target.name);
+            const setterName = escapeHtml(setter.name);
+            getEl('ngw-custom-instruction').innerHTML = byMode(
+                `${targetName}のNGワードを設定してください<br>（${setterName}が入力）`,
+                `${targetName}の えぬじーわーどを せっていしてください<br>（${setterName}が にゅうりょく）`
+            );
         },
 
         confirmCustomWord() {
@@ -1249,7 +1646,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alertByMode('NGワードを入力してください', 'えぬじーわーどを にゅうりょくしてください');
                 return;
             }
-            if (typeof hiraganaMode !== 'undefined' && hiraganaMode.enabled && containsKanji(input)) {
+            if (isKana() && containsKanji(input)) {
                 alert('かんじは つかえません。ひらがな か かたかなで にゅうりょくしてください。');
                 return;
             }
@@ -1323,7 +1720,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.style.padding = '8px 0';
                 li.style.borderBottom = '1px dashed var(--border-color)';
-                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>: ${p.ngWord}`;
+                li.innerHTML = `<span class="ngw-name">${escapeHtml(p.name)}</span>: ${escapeHtml(p.ngWord)}`;
                 listEl.appendChild(li);
             });
             if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
@@ -1350,7 +1747,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.updateTimerDisplay();
 
             const timerBtn = getEl('ngw-timer-start');
-            timerBtn.textContent = 'タイマースタート';
+            timerBtn.textContent = byMode('タイマースタート', 'たいまーすたーと');
             timerBtn.disabled = false;
 
             this.renderGamePlayers();
@@ -1370,14 +1767,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 box.style.padding = '8px 6px';
                 box.style.border = '2px solid var(--border-color)';
                 box.style.borderRadius = '8px';
-                box.style.background = this.eliminated[i] ? '#ffe5e5' : 'var(--card-bg-color)';
+                box.style.background = this.eliminated[i] ? 'var(--eliminated-bg)' : 'var(--card-bg-color)';
 
                 const status = this.eliminated[i] ? '脱落' : '生存';
-                const statusColor = this.eliminated[i] ? '#d32f2f' : '#2e7d32';
+                const statusColor = this.eliminated[i] ? 'var(--danger-color)' : 'var(--success-color)';
 
                 box.innerHTML = `
-                    <div style="font-weight: bold; margin-bottom: 4px;">${p.name}</div>
-                    <div style="font-size: 0.95em; color: ${statusColor};">${status}</div>
+                    <div class="ngw-name">${escapeHtml(p.name)}</div>
+                    <div class="ngw-status" style="color: ${statusColor};">${escapeHtml(status)}</div>
                 `;
                 grid.appendChild(box);
             });
@@ -1412,7 +1809,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.style.padding = '8px 0';
                 li.style.borderBottom = '1px dashed var(--border-color)';
-                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>: ${p.ngWord}`;
+                li.innerHTML = `<span class="ngw-name">${escapeHtml(p.name)}</span>: ${escapeHtml(p.ngWord)}`;
                 listEl.appendChild(li);
             });
             if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
@@ -1486,9 +1883,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.style.padding = '10px 0';
                 li.style.borderBottom = '1px dashed var(--border-color)';
                 const status = this.eliminated[i] ? '脱落' : '生存';
-                const statusColor = this.eliminated[i] ? '#d32f2f' : '#2e7d32';
+                const statusColor = this.eliminated[i] ? 'var(--danger-color)' : 'var(--success-color)';
                 const winnerMark = i === winnerIndex ? '【勝者】' : '';
-                li.innerHTML = `<span style="font-weight:bold;">${p.name}</span>${winnerMark ? ' ' + winnerMark : ''}: <span style="font-size:1.2em;">${p.ngWord}</span> <span style="color:${statusColor};">(${status})</span>`;
+                li.innerHTML = `<span class="ngw-name">${escapeHtml(p.name)}</span>${winnerMark ? ' ' + winnerMark : ''}: <span class="ngw-word">${escapeHtml(p.ngWord)}</span> <span style="color:${statusColor};">(${escapeHtml(status)})</span>`;
                 listEl.appendChild(li);
             });
             if (listEl.lastElementChild) listEl.lastElementChild.style.borderBottom = 'none';
@@ -1502,12 +1899,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.updateTimerDisplay();
                 if (this.timeLeft <= 0) {
                     this.stopTimer();
-                    alert('時間切れです！');
+                    const btn = getEl('ngw-timer-start');
+                    if (btn) { btn.textContent = byMode('タイマースタート', 'たいまーすたーと'); btn.disabled = false; }
+                    alertByMode('時間切れです！', 'じかんぎれです！');
                 }
             }, 1000);
 
             const btn = getEl('ngw-timer-start');
-            btn.textContent = '進行中...';
+            btn.textContent = byMode('進行中...', 'しんこうちゅう...');
             btn.disabled = true;
         },
 
@@ -1549,4 +1948,14 @@ document.addEventListener('DOMContentLoaded', () => {
             el.addEventListener('touchcancel', end, { passive: false });
         }
     };
+    registerTimerOwner(ngw);
+
+    // --- PWA: オフラインでも遊べるようにする ---------------------------------
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => {
+                console.warn('Service worker registration failed.', err);
+            });
+        });
+    }
 });

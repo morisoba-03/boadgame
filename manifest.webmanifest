@@ -1,0 +1,20 @@
+{
+  "name": "みんなのボドゲ",
+  "short_name": "ボドゲ",
+  "description": "スマホ1台をみんなで回して遊べる、言葉あそび中心のボードゲーム集。",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDFBF6",
+  "theme_color": "#FDFBF6",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
