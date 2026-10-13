@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="みんなのボドゲ">
+  <rect width="512" height="512" rx="96" fill="#FDFBF6"/>
+  <g fill="none" stroke="#4A4A4A" stroke-width="16" stroke-linejoin="round">
+    <rect x="96" y="96" width="140" height="140" rx="24" fill="#F6C555"/>
+    <rect x="276" y="96" width="140" height="140" rx="24" fill="#7EC8B0"/>
+    <rect x="96" y="276" width="140" height="140" rx="24" fill="#8FB8E8"/>
+    <rect x="276" y="276" width="140" height="140" rx="24" fill="#F29C9C"/>
+  </g>
+  <g fill="#4A4A4A">
+    <circle cx="166" cy="166" r="22"/>
+    <circle cx="346" cy="140" r="16"/><circle cx="346" cy="192" r="16"/>
+    <circle cx="140" cy="320" r="16"/><circle cx="166" cy="346" r="16"/><circle cx="192" cy="372" r="16"/>
+    <circle cx="320" cy="320" r="16"/><circle cx="372" cy="320" r="16"/>
+    <circle cx="320" cy="372" r="16"/><circle cx="372" cy="372" r="16"/>
+  </g>
+</svg>

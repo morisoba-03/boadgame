@@ -2,8 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>みんなのボドゲ</title>
+    <meta name="description" content="スマホ1台をみんなで回して遊べる、言葉あそび中心のボードゲーム集。">
+    <meta name="theme-color" content="#FDFBF6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1F1D1A" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="みんなのボドゲ">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon.svg">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -339,6 +348,14 @@
         <div id="page-settings" class="page">
             <header><button data-goto="page-top" class="back-button">&lt; 戻る</button><h2>お題の管理</h2></header>
             <main><div id="settings-tabs"><button class="tab-button active" data-game="ワードスナイパー">ワードスナイパー</button><button class="tab-button" data-game="ITO">ITO</button><button class="tab-button" data-game="ボブジテン">ボブジテン</button><button class="tab-button" data-game="キャット＆チョコレート">キャット＆チョコレート</button><button class="tab-button" data-game="ワードウルフ">ワードウルフ</button><button class="tab-button" data-game="クイズいいセン行きまSHOW！">いいセン</button><button class="tab-button" data-game="NGワードゲーム">NGワード</button></div><div id="settings-sub-tabs" class="hidden"></div><div id="settings-editor"><div class="settings-add-form"><input type="text" id="new-theme-input" placeholder="新しいお題/アイテムを入力..."><button id="add-theme-button">追加</button></div><ul id="settings-list"></ul></div><div class="settings-import-export"><p>CSVファイルでの入出力 (表示中リストのみ)</p><label for="csv-import" class="main-button sub-button">CSVをインポート</label><input type="file" id="csv-import" class="hidden" accept=".csv"><button id="csv-export" class="main-button sub-button">CSVをエクスポート</button></div></main>
+        </div>
+    </div>
+    <!-- ルール説明モーダル（以前は alert() で表示していた） -->
+    <div id="rule-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="rule-modal-title">
+        <div class="modal-panel">
+            <h2 id="rule-modal-title" class="modal-title"></h2>
+            <p id="rule-modal-body" class="modal-body"></p>
+            <button id="rule-modal-close" class="main-button sub-button">とじる</button>
         </div>
     </div>
     <script src="themes.js"></script>
