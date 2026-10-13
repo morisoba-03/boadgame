@@ -1,0 +1,1013 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><meta name="theme-color" content="#06231a"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="卓上点棒"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png" type="image/png"><link rel="apple-touch-icon" href="icon-192.png"></head><body>
+<title>卓上点棒</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;700;900&family=Zen+Old+Mincho:wght@700;900&display=swap">
+<style>
+:root{
+  color-scheme: dark;
+  --felt:#0f4a39; --felt2:#0b3a2c; --deep:#06231a; --panel:rgba(3,24,17,.55);
+  --line:rgba(236,228,205,.16); --ivory:#efe7d2; --ivory2:#d8cdb0; --tileback:#c08a2e;
+  --ink:#142520; --text:#eef2ea; --muted:#9dbfb1; --gold:#e7b54c; --red:#d9432f; --orange:#e98a3c;
+  --good:#9fe0a4; --bad:#ff8f7f;
+  --num:"Barlow Condensed","Arial Narrow",sans-serif;
+  --jp:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --min:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+}
+[hidden]{display:none!important}
+html{box-sizing:border-box;height:100%;background:var(--deep)}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;margin:0;overflow:hidden;color:var(--text);font-family:var(--jp);
+  background:radial-gradient(ellipse at 50% 45%,var(--felt) 0%,var(--felt2) 65%,var(--deep) 100%);
+  padding-inline:max(16px,env(safe-area-inset-left,0px));padding-block:10px;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button{font:inherit;color:inherit;touch-action:manipulation;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+#app{position:relative;height:100%}
+#table{position:absolute;inset:0}
+
+/* ---- seats ---- */
+.seat{position:absolute}
+.seat[data-pos="0"]{left:0;right:0;bottom:0;height:var(--band)}
+.seat[data-pos="2"]{left:0;right:0;top:0;height:var(--band)}
+.seat[data-pos="1"]{right:0;top:var(--band);width:var(--side);height:var(--mid)}
+.seat[data-pos="3"]{left:0;top:var(--band);width:var(--side);height:var(--mid)}
+.face{position:absolute;left:50%;top:50%;width:calc(100% - 8px);height:calc(100% - 8px);
+  transform:translate(-50%,-50%);container-type:size;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:3.5cqw;padding:0 3.5cqw}
+.seat[data-pos="2"] .face{transform:translate(-50%,-50%) rotate(180deg)}
+.seat[data-pos="1"] .face{width:calc(var(--mid) - 8px);height:calc(var(--side) - 8px);transform:translate(-50%,-50%) rotate(-90deg)}
+.seat[data-pos="3"] .face{width:calc(var(--mid) - 8px);height:calc(var(--side) - 8px);transform:translate(-50%,-50%) rotate(90deg)}
+.face.dealer{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold),0 0 28px rgba(231,181,76,.18)}
+.face.active{border-color:var(--ivory);box-shadow:inset 0 0 0 1px var(--ivory),0 0 30px rgba(239,231,210,.2)}
+.face.empty{display:flex;justify-content:center;border-style:dashed;background:transparent;color:var(--muted);font-size:14cqh}
+.tile{position:relative;height:60cqh;aspect-ratio:3/4;display:grid;place-items:center;border-radius:9cqh;
+  background:linear-gradient(180deg,var(--ivory),var(--ivory2));color:var(--ink);
+  font-family:var(--min);font-weight:900;font-size:36cqh;line-height:1;box-shadow:0 4cqh 0 var(--tileback)}
+.tile.is-oya{color:var(--red)}
+.tile .oya{position:absolute;top:-12cqh;right:-14cqh;background:var(--gold);color:var(--ink);
+  font-family:var(--jp);font-weight:900;font-size:13cqh;padding:2cqh 5cqh;border-radius:99px;line-height:1.2}
+.mid{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1cqh}
+.nm-row{display:flex;align-items:center;gap:2cqw;font-size:14cqh;color:var(--muted);min-width:0}
+.nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700}
+.nr{margin-left:auto;flex:none}
+.bdg{flex:none;border-radius:99px;padding:0 4cqh;font-size:max(10px,11cqh);font-weight:900;white-space:nowrap;line-height:1.35}
+.bdg.y{background:var(--orange);color:var(--ink)}
+.bdg.c{background:rgba(239,231,210,.14);color:var(--ivory);font-family:var(--num);font-weight:600}
+.diff{font-family:var(--num);font-weight:600;font-size:17cqh;white-space:nowrap}
+.diff.p{color:var(--good)} .diff.m{color:var(--bad)} .diff.b{color:var(--gold)}
+.tobi,.rflag{background:var(--red);color:#fff;border-radius:99px;padding:0 5cqh;font-size:12cqh;font-weight:900;white-space:nowrap}
+.score{background:none;border:0;padding:0;text-align:left;font-family:var(--num);font-weight:600;
+  font-size:min(44cqh,14cqw);line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.score.neg{color:var(--bad)}
+
+/* seat action buttons: stacked on the top/bottom faces, a row on the long side faces */
+.btns{display:grid;grid-auto-flow:row;gap:3cqh;align-content:center}
+.fb{height:27cqh;min-width:24cqw;border-radius:9px;border:1.5px solid var(--line);background:rgba(239,231,210,.06);
+  font-weight:700;font-size:max(12px,12cqh);display:flex;align-items:center;justify-content:center;gap:2cqw;padding:0 2cqw;line-height:1.1}
+.fb .stick{width:5cqw;height:4cqh;min-height:5px}
+.fb.win{background:var(--ivory);color:var(--ink);border-color:transparent;font-weight:900}
+.fb.rch.on,.fb.on{background:var(--red);border-color:var(--red);color:#fff}
+.tgt{height:70cqh;min-width:28cqw;border-radius:12px;border:0;background:var(--gold);color:var(--ink);font-weight:900;
+  font-size:max(13px,15cqh);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2cqh;padding:0 3cqw;line-height:1.1}
+.tgt small{font-size:max(10px,10cqh);font-weight:700;opacity:.8}
+.tgt.red{background:var(--red);color:#fff}
+.tgt.off{background:rgba(239,231,210,.08);color:var(--muted);border:1.5px dashed var(--line)}
+.tgt.dim{opacity:.45}
+.btns.dr .tgt{height:52cqh}
+.pad{min-width:0;display:flex;flex-direction:column;gap:3cqh}
+.amt-l{display:flex;align-items:baseline;gap:2cqw;font-size:max(11px,12cqh);color:var(--muted);white-space:nowrap}
+.amt-l b{font-family:var(--num);font-size:24cqh;line-height:1;color:var(--text);font-weight:700}
+.unit{border:1px solid var(--line);background:rgba(239,231,210,.1);border-radius:99px;padding:0 3cqw;font-size:max(11px,11cqh);font-weight:700}
+.pc{display:grid;grid-template-columns:repeat(3,1fr);gap:2cqh}
+.pc button{height:19cqh;border-radius:7px;border:1px solid var(--line);background:rgba(239,231,210,.08);
+  font-family:var(--num);font-weight:600;font-size:max(12px,13cqh);padding:0}
+@container (min-aspect-ratio: 7/2){
+  .btns{grid-auto-flow:column;gap:2cqw}
+  .fb{height:62cqh;min-width:0;aspect-ratio:1/1;flex-direction:column;gap:6cqh;font-size:max(12px,13cqh);padding:0}
+  .fb .stick{width:60%;height:6cqh}
+  .btns.dr .tgt{height:70cqh}
+  .btns.dr .fb{aspect-ratio:auto;padding:0 3cqw}
+  .pad{flex-direction:row;align-items:center;gap:3cqw}
+  .amt-l{flex-direction:column;align-items:flex-start;gap:1cqh}
+  .amt-l b{font-size:32cqh}
+  .pc{flex:1;grid-template-columns:repeat(5,1fr)}
+  .pad.chipmode .pc{grid-template-columns:repeat(3,1fr)}
+  .pc button{height:36cqh}
+}
+.delta{position:absolute;left:50%;top:-4cqh;transform:translateX(-50%);font-family:var(--num);font-weight:700;
+  font-size:26cqh;line-height:1.1;padding:0 5cqh;border-radius:8px;background:var(--deep);border:1px solid var(--line);
+  animation:pop 3.4s ease forwards;pointer-events:none;white-space:nowrap}
+.delta.p{color:var(--good)} .delta.m{color:var(--bad)}
+@keyframes pop{0%{opacity:0;margin-top:10cqh}10%{opacity:1;margin-top:0}80%{opacity:1}100%{opacity:0}}
+
+/* tenbou */
+.stick{display:inline-block;position:relative;width:30px;height:7px;border-radius:4px;background:var(--ivory);
+  box-shadow:0 1px 0 rgba(0,0,0,.35);vertical-align:middle;flex:none}
+.stick.s1000::after{content:"";position:absolute;left:50%;top:50%;height:70%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:var(--red)}
+.stick.s100::before,.stick.s100::after{content:"";position:absolute;top:1.5px;width:6px;height:4px;
+  background:radial-gradient(circle,#1d1d1d 0 .75px,transparent 1.05px) 0 0/2px 2px}
+.stick.s100::before{left:3px} .stick.s100::after{right:3px}
+
+/* ---- center ---- */
+.center{position:absolute;left:var(--side);right:var(--side);top:var(--band);bottom:var(--band);
+  padding:6px;container-type:size;display:flex;flex-direction:column;justify-content:center;gap:min(2.6cqh,14px)}
+.round{text-align:center;display:flex;flex-direction:column;align-items:center;gap:min(1.2cqh,6px)}
+.rw{font-family:var(--min);font-weight:900;font-size:min(21cqw,8.5cqh);letter-spacing:.06em;line-height:1.1}
+.meta{display:flex;flex-direction:column;gap:3px;font-size:min(8.5cqw,3.4cqh);color:var(--muted);align-items:flex-start}
+.meta span{display:flex;align-items:center;gap:6px}
+.meta b{color:var(--text);font-family:var(--num);font-size:1.25em;font-weight:600}
+.tag{border:0;border-radius:99px;padding:2px 10px;font-size:min(7.5cqw,3cqh);font-weight:900;background:rgba(239,231,210,.12);color:var(--ivory)}
+.tag.gold{background:var(--gold);color:var(--ink)}
+.dmini{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;min-height:min(20cqw,8.5cqh);
+  border-radius:12px;border:1px dashed var(--line);background:transparent;color:var(--muted);font-size:min(8cqw,3.4cqh)}
+.drow{display:flex;align-items:center;gap:7px}
+.dmini .die{width:min(16cqw,6.5cqh)}
+.dmini.rolling .die{animation:shake .12s linear infinite}
+.dmini b{font-family:var(--num);font-size:min(14cqw,6cqh);color:var(--text);font-weight:600}
+.arrow{display:inline-block;color:var(--gold);font-size:min(12cqw,5cqh);line-height:1}
+.dtxt{font-size:min(7.5cqw,3.1cqh);color:var(--text)}
+.dtxt em{font-style:normal;color:var(--gold);font-weight:900}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.act{min-height:min(21cqw,8.5cqh);border-radius:12px;border:1px solid var(--line);background:rgba(239,231,210,.07);
+  font-weight:700;font-size:min(8.5cqw,3.6cqh);padding:2px}
+.act.wide{grid-column:1/-1}
+.act.primary{background:var(--ivory);color:var(--ink);border-color:transparent;font-weight:900}
+.act.on{background:var(--red);border-color:var(--red);color:#fff}
+.undo{background:none;border:0;color:var(--muted);font-size:min(7.5cqw,3.2cqh);padding:4px}
+.undo:disabled{opacity:.3}
+.hist-row{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.hist-row .undo{padding:6px 0;white-space:nowrap}
+.chint{text-align:center;font-size:min(7cqw,3cqh);color:var(--muted);line-height:1.5}
+.mode-box{border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.25);padding:10px 8px;text-align:center;
+  font-size:min(7.5cqw,3.2cqh);line-height:1.55;color:var(--muted)}
+.mode-box b{color:var(--text);display:block;font-size:1.25em}
+.mini-dl{display:grid;gap:3px;font-size:min(7.5cqw,3.2cqh)}
+.mini-dl div{display:flex;justify-content:space-between;gap:6px}
+.mini-dl span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.mini-dl b{font-family:var(--num);font-size:1.3em;font-weight:600}
+.p{color:var(--good)} .m{color:var(--bad)}
+.die{display:block;aspect-ratio:1;height:auto;filter:drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+@keyframes shake{0%{transform:rotate(-10deg)}50%{transform:rotate(10deg) translateY(-3px)}100%{transform:rotate(-10deg)}}
+
+/* ---- sheets ---- */
+.sheet{position:absolute;left:50%;top:50%;z-index:10;border-radius:16px;border:1px solid var(--line);
+  background:linear-gradient(180deg,#0a3327,var(--deep));display:flex;flex-direction:column;padding:12px;gap:10px;
+  animation:fadein .18s ease}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.sh-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sh-head h2{margin:0;font-size:18px;font-weight:900;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.x{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:transparent;font-size:18px;line-height:1}
+.sh-body{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(6px,1.3dvh,12px);overflow:auto;container-type:size}
+.sec{display:flex;flex-direction:column;gap:5px}
+.lbl{font-size:12px;color:var(--muted);letter-spacing:.08em;font-weight:700}
+.chips{display:grid;gap:6px}
+.chip{min-height:clamp(34px,5.2dvh,46px);border-radius:10px;border:1px solid var(--line);background:rgba(239,231,210,.06);
+  font-weight:700;font-size:15px;padding:2px 4px;line-height:1.15;min-width:0;overflow:hidden}
+.chip small{display:block;font-size:10.5px;font-weight:500;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.on{background:var(--ivory);color:var(--ink);border-color:var(--ivory)}
+.chip.on.y{background:var(--orange);border-color:var(--orange)}
+.chip:disabled{opacity:.25;cursor:default}
+.chip.num{font-family:var(--num);font-size:19px;font-weight:600}
+.preview{border-radius:12px;background:rgba(0,0,0,.28);border:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.pv-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pv-hand{color:var(--muted);font-size:13px}
+.pv-big{font-family:var(--num);font-weight:700;font-size:26px;line-height:1}
+.pv-big em{font-style:normal;font-family:var(--jp);font-size:14px;color:var(--gold);margin-left:6px;font-weight:900}
+.dl{display:grid;gap:4px}
+.dl div{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--muted);min-width:0}
+.dl div span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dl b{font-family:var(--num);font-size:18px;font-weight:600;color:var(--text)}
+.dl b.p{color:var(--good)} .dl b.m{color:var(--bad)}
+.hint{color:var(--muted);font-size:13px}
+.big{min-height:50px;border-radius:12px;border:0;background:var(--gold);color:var(--ink);font-weight:900;font-size:17px;flex:none}
+.big:disabled{opacity:.3;cursor:default}
+.big.sub{background:rgba(239,231,210,.1);color:var(--text);border:1px solid var(--line)}
+.big.warn{background:var(--red);color:#fff}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inp{width:100%;min-width:0;background:rgba(0,0,0,.28);border:1px solid var(--line);color:var(--text);border-radius:9px;
+  padding:8px 9px;font:inherit;font-size:16px;-webkit-user-select:text;user-select:text}
+.inp.num{font-family:var(--num);font-size:18px}
+.fld{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);min-width:0}
+.stp{display:grid;grid-template-columns:52px 1fr 52px;gap:8px;align-items:center}
+.stp .v{text-align:center;font-family:var(--min);font-weight:900;font-size:22px}
+.stp .v small{display:block;font-family:var(--jp);font-size:11px;color:var(--muted);font-weight:500}
+.stp button{height:46px;border-radius:10px;border:1px solid var(--line);background:rgba(239,231,210,.06);font-size:20px}
+.mstp{display:grid;grid-template-columns:40px 1fr 40px;gap:4px;align-items:center;text-align:center;font-size:13px;line-height:1.2}
+.mstp button{min-height:40px;border-radius:10px;border:1px solid var(--line);background:rgba(239,231,210,.06);font-size:18px}
+.mstp b{font-family:var(--num);font-size:20px}
+.mstp small{display:block;font-size:10px;color:var(--muted)}
+.opts{display:grid;gap:6px}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.menu-grid .big{font-size:15px}
+.rules{font-size:12px;color:var(--muted);line-height:1.6}
+.tabs{display:grid;gap:4px;padding:3px;border-radius:12px;background:rgba(0,0,0,.3);flex:none}
+.tabs button{min-height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-weight:700;font-size:14px;padding:0 4px}
+.tabs button.on{background:var(--ivory);color:var(--ink)}
+.tabs button.edit{color:var(--gold)}
+.tblwrap{flex:1;min-height:90px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.tblwrap.fit{flex:none;min-height:0}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 4px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:#0a3327;font-size:12px;color:var(--muted);font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:80px}
+th:first-child,td:first-child{text-align:left;padding-left:10px;color:var(--muted);font-size:12px}
+td{font-family:var(--num);font-size:18px;font-weight:600}
+table.sm td{font-size:16px} table.sm td.net{font-size:18px}
+td.nmc{font-family:var(--jp);font-size:13px;color:var(--text);font-weight:700;max-width:70px;overflow:hidden;text-overflow:ellipsis}
+td small{display:block;font-family:var(--jp);font-size:10px;color:var(--muted);font-weight:500}
+td.net{font-size:20px}
+tfoot td{border-top:2px solid var(--line);border-bottom:0;font-size:20px;position:sticky;bottom:0;background:#08291f}
+.xfer{display:flex;flex-direction:column;gap:4px}
+.xfer div{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-radius:9px;background:rgba(0,0,0,.25);font-size:14px}
+.xfer b{font-family:var(--num);font-size:20px;font-weight:700;color:var(--gold)}
+.oya-map{position:relative;flex:1;min-height:200px}
+.oya-map .chip{position:absolute;width:38%;min-height:64px;font-size:16px}
+.oya-map .chip[data-i="0"]{left:31%;bottom:0}
+.oya-map .chip[data-i="1"]{right:0;top:50%;transform:translateY(-50%)}
+.oya-map .chip[data-i="2"]{left:31%;top:0}
+.oya-map .chip[data-i="3"]{left:0;top:50%;transform:translateY(-50%)}
+.oya-map .mark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--min);font-weight:900;font-size:15px;color:var(--muted)}
+.end-reason{font-family:var(--min);font-weight:900;font-size:22px;text-align:center;padding:10px 0;text-wrap:balance}
+/* win picker: two columns when the sheet is turned sideways toward a side seat */
+.wp{display:flex;flex-direction:column;gap:clamp(6px,1.3dvh,12px);min-height:100%}
+.wp-l,.wp-r{display:contents}
+.wp .s-from{order:0} .wp .s-han{order:1} .wp .s-fu{order:2} .wp .opts{order:3} .wp .preview{order:4}
+.wp .ok{order:5;margin-top:auto}
+@container (orientation: landscape){
+  .wp{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;height:100%}
+  .wp-l,.wp-r{display:flex;flex-direction:column;gap:7px;min-height:0}
+  .wp .chip{min-height:34px}
+  .wp .preview{padding:7px 10px;gap:4px}
+}
+.toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);z-index:30;max-width:86%;
+  background:var(--ivory);color:var(--ink);font-weight:700;font-size:15px;padding:10px 16px;border-radius:12px;
+  box-shadow:0 8px 30px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition:none!important}}
+</style>
+
+<div id="app">
+  <div id="table"></div>
+  <div id="sheet" class="sheet" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+(() => {
+const KEY = 'jantaku-v1', HKEY = 'jantaku-v1-hist', FKEY = 'jantaku-v1-future';
+const WINDS = '東南西北', NUMK = ['一','二','三','四'], POS = ['手前','右','奥','左'];
+const $ = s => document.querySelector(s);
+const tableEl = $('#table'), sheetEl = $('#sheet'), toastEl = $('#toast');
+
+/* ---------- state ----------
+   Seats are table positions (0 手前, 1 右, 2 奥, 3 左). Players have fixed ids so records,
+   chips and stats follow a person through seat changes: S.seats[pos] = player id.       */
+const clone = o => JSON.parse(JSON.stringify(o));
+const newStats = () => [0,1,2,3].map(() => ({hands:0, wins:0, dealins:0, riichi:0, winSum:0}));
+function ruleDefaults(n){ return n === 4 ? {start:25000, ret:30000, uma:[20,10,-10,-20]} : {start:35000, ret:40000, uma:[15,0,-15]}; }
+const DEF = {v:2, n:4, pl:[{name:'Aさん'},{name:'Bさん'},{name:'Cさん'},{name:'Dさん'}], seats:[0,1,2,3],
+  ...ruleDefaults(4), tsumo:'loss', kiriage:true, wall3:4, tobi:true, agariyame:true,
+  chipOn:false, chipYen:100, yakiOn:false, yakiPt:10, topPt:0,
+  kiche:0, records:[], rate:50, fee:0, feePayer:-1, unit:10, chips:[0,0,0,0]};
+function freshGame(s){
+  s.scores = Array(s.n).fill(s.start); s.kyoku = 0; s.honba = 0; s.kyotaku = 0;
+  s.riichi = Array(s.n).fill(false); s.won = Array(s.n).fill(false); s.dice = null;
+}
+function initial(){ const s = clone(DEF); s.st = newStats(); freshGame(s); return s; }
+function migrate(s){
+  if (!s.v){
+    s.pl = [0,1,2,3].map(i => ({name:(s.names && s.names[i]) || 'ABCD'[i] + 'さん'}));
+    s.seats = [...Array(s.n).keys()]; s.kiriage = true; delete s.names; s.v = 2;
+  }
+  for (const k in DEF) if (s[k] == null) s[k] = clone(DEF[k]);
+  if (!s.st) s.st = newStats();
+  if (!s.won) s.won = Array(s.n).fill(false);
+  return s;
+}
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && Array.isArray(s.scores) && s.scores.length === s.n){ if (!s.v){ localStorage.removeItem(HKEY); localStorage.removeItem(FKEY); } return migrate(s); }
+  }catch(e){}
+  return initial();
+}
+function loadList(k){ try{ const h = JSON.parse(localStorage.getItem(k)); if (Array.isArray(h)) return h; }catch(e){} return []; }
+let S = load(), hist = loadList(HKEY), future = loadList(FKEY);
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); localStorage.setItem(HKEY, JSON.stringify(hist)); localStorage.setItem(FKEY, JSON.stringify(future)); }catch(e){} }
+function push(){ hist.push(JSON.stringify(S)); if (hist.length > 40) hist.shift(); future = []; }
+function commit(){ save(); render(); }
+
+// ui.mode: null | pick | pay{f,a,unit} | draw{t,ng,abort} | multi{l,wins}
+const ui = {sheet:null, sheetPos:0, mode:null, flash:null, diffBase:null, arm:null, recTab:'table', setTab:'basic', editNames:false};
+let diffTimer, armTimer, toastTimer;
+
+/* ---------- helpers ---------- */
+const fmt = n => n.toLocaleString('ja-JP');
+const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + fmt(Math.abs(n));
+const cls = n => n > 0 ? 'p' : n < 0 ? 'm' : '';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ceil100 = x => Math.ceil(x / 100) * 100;
+const r1 = x => Math.round(x * 10) / 10;
+const dealer = () => (S.kiche + S.kyoku) % S.n;
+const windOf = i => WINDS[(i - dealer() + S.n) % S.n];
+const roundLabel = () => WINDS[Math.floor(S.kyoku / S.n) % 4] + NUMK[S.kyoku % S.n] + '局';
+const pid = pos => S.seats[pos];
+const name = pos => S.pl[S.seats[pos]].name;
+const pname = id => S.pl[id].name;
+const pt1 = x => (x > 0 ? '+' : x < 0 ? '−' : '±') + Math.abs(x).toFixed(1);
+const yen = x => (x > 0 ? '+' : x < 0 ? '−' : '±') + fmt(Math.abs(x));
+const range = n => [...Array(n).keys()];
+
+function toast(msg){
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+}
+function flash(delta){
+  if (ui.flash && Date.now() - ui.flash.t < 3000) delta = delta.map((v, i) => v + (ui.flash.delta[i] || 0));
+  ui.flash = {delta, t:Date.now()};
+  setTimeout(() => { if (ui.flash && Date.now() - ui.flash.t >= 3300){ ui.flash = null; render(); } }, 3400);
+}
+function arm(key){ ui.arm = key; clearTimeout(armTimer); armTimer = setTimeout(() => { ui.arm = null; render(); }, 3500); }
+
+/* ---------- scoring ---------- */
+function basePts(han, fu, yk){
+  if (yk) return 8000 * yk;
+  if (han >= 13) return 8000; if (han >= 11) return 6000; if (han >= 8) return 4000;
+  if (han >= 6) return 3000; if (han >= 5) return 2000;
+  if (S.kiriage && ((han === 4 && fu === 30) || (han === 3 && fu === 60))) return 2000;
+  return Math.min(2000, fu * 2 ** (han + 2));
+}
+function limitName(han, yk, base){
+  if (yk) return yk > 1 ? yk + '倍役満' : '役満';
+  if (han >= 13) return '数え役満'; if (han >= 11) return '三倍満'; if (han >= 8) return '倍満';
+  if (han >= 6) return '跳満'; if (base >= 2000) return '満貫'; return '';
+}
+// tsumo payments; three-player uses ツモ損 or splits the missing north share
+function tsumoDelta(w, base, honba){
+  const n = S.n, d = dealer(), wd = w === d, pc = ceil100(base), pd = ceil100(base * 2);
+  const extra = (n === 3 && S.tsumo === 'split') ? ceil100((wd ? pd : pc) / 2) : 0;
+  const delta = Array(n).fill(0);
+  for (let i = 0; i < n; i++){ if (i === w) continue; const p = (wd || i === d ? pd : pc) + extra + honba * 100; delta[i] -= p; delta[w] += p; }
+  return {delta, pc, pd, extra, wd};
+}
+function calcWin(W, noKyotaku){
+  const n = S.n, d = dealer(), wd = W.w === d, base = basePts(W.han, W.fu, W.yk);
+  const pao = W.yk && W.pao != null && W.pao !== W.w ? W.pao : null;
+  let delta = Array(n).fill(0), text, value;
+  if (W.how === 'ron'){
+    const p = ceil100(base * (wd ? 6 : 4)), hb = S.honba * 100 * (n - 1);
+    if (pao != null && pao !== W.l){ const half = ceil100(p / 2); delta[pao] -= half; delta[W.l] -= p - half + hb; }
+    else delta[W.l] -= p + hb;
+    delta[W.w] += p + hb; text = fmt(p); value = p;
+  } else {
+    const t = tsumoDelta(W.w, base, S.honba);
+    const total = t.delta[W.w];
+    value = total - S.honba * 100 * (n - 1);
+    if (pao != null){ delta[pao] = -total; delta[W.w] = total; } else delta = t.delta;
+    text = t.wd ? fmt(t.pd) + 'オール' : fmt(t.pc) + '・' + fmt(t.pd);
+    if (t.extra) text += ' +' + fmt(t.extra);
+  }
+  if (!noKyotaku) delta[W.w] += S.kyotaku * 1000;
+  return {delta, text, value, limit:limitName(W.han, W.yk, base), wd, pao};
+}
+function calcDraw(M){
+  const n = S.n; let delta = Array(n).fill(0);
+  if (M.abort) return delta;
+  if (M.ng.some(Boolean)){
+    // 流し満貫: mangan tsumo for each, no honba, no noten payments
+    M.ng.forEach((on, i) => { if (on) tsumoDelta(i, 2000, 0).delta.forEach((v, k) => delta[k] += v); });
+    return delta;
+  }
+  const t = M.t.filter(Boolean).length, total = n === 4 ? 3000 : 2000;
+  if (t === 0 || t === n) return delta;
+  M.t.forEach((on, i) => { delta[i] = on ? total / t : -total / (n - t); });
+  return delta;
+}
+function calcPts(scores, kyotaku){
+  const n = S.n, order = range(n).sort((a, b) => scores[b] - scores[a] || ((a - S.kiche + n) % n) - ((b - S.kiche + n) % n));
+  const fin = scores.slice(); fin[order[0]] += kyotaku * 1000;
+  const oka = (S.ret - S.start) * n / 1000, pts = Array(n).fill(0), rank = Array(n).fill(0);
+  order.forEach((i, r) => { rank[i] = r + 1; pts[i] = r1((fin[i] - S.ret) / 1000 + (S.uma[r] || 0) + (r === 0 ? oka : 0)); });
+  return {pts, rank, fin};
+}
+// final points for the current game (by seat), including top prize and yakitori
+function gameResult(yaki){
+  const n = S.n, r = calcPts(S.scores, S.kyotaku), pts = r.pts.slice(), top = r.rank.indexOf(1);
+  if (S.topPt){ pts[top] += S.topPt; range(n).forEach(i => { if (i !== top) pts[i] -= S.topPt / (n - 1); }); }
+  if (S.yakiOn && yaki){
+    const ys = range(n).filter(i => yaki[i]), ns = range(n).filter(i => !yaki[i]);
+    if (ys.length && ns.length){ ys.forEach(i => pts[i] -= S.yakiPt); ns.forEach(i => pts[i] += S.yakiPt * ys.length / ns.length); }
+  }
+  return {pts:pts.map(r1), rank:r.rank, fin:r.fin};
+}
+function totals(){
+  const t = Array(S.n).fill(0); S.records.forEach(r => r.pts.forEach((p, i) => t[i] += p));
+  return t.map(r1);
+}
+// money by player id: pt × rate, chips × price, venue fee split evenly
+function settle(){
+  const n = S.n, u = S.unit || 1, R = x => Math.round(x / u) * u, share = S.fee / n, tot = totals();
+  const collector = S.feePayer === -2 ? tot.reduce((b, p, i) => p > tot[b] ? i : b, 0) : S.feePayer;
+  const rows = tot.map((p, i) => {
+    const win = p * S.rate, chip = S.chipOn ? S.chips[i] * S.chipYen : 0, fee = -share + (collector === i ? S.fee : 0);
+    return {p, win:R(win), chip:R(chip), fee:R(fee), net:R(win + chip + fee)};
+  });
+  const bal = rows.map((r, i) => ({i, v:r.net})), cred = bal.filter(b => b.v > 0).sort((a, b) => b.v - a.v), debt = bal.filter(b => b.v < 0).sort((a, b) => a.v - b.v);
+  const xfers = []; let ci = 0, di = 0;
+  while (ci < cred.length && di < debt.length){
+    const amt = Math.min(cred[ci].v, -debt[di].v);
+    if (amt > 0) xfers.push({f:debt[di].i, t:cred[ci].i, a:amt});
+    cred[ci].v -= amt; debt[di].v += amt;
+    if (cred[ci].v <= 0) ci++; if (debt[di].v >= 0) di++;
+  }
+  return {rows, xfers, share:R(share), gap:rows.reduce((a, r) => a + r.net, 0), collector};
+}
+
+/* ---------- hand flow ---------- */
+function endHand(renchan, isDraw){
+  const n = S.n, wasOras = S.kyoku === 2 * n - 1;
+  S.riichi = Array(n).fill(false); S.dice = null;
+  S.seats.forEach(id => S.st[id].hands++);
+  if (renchan) S.honba++; else { S.kyoku++; S.honba = isDraw ? S.honba + 1 : 0; }
+  let reason = null;
+  if (S.tobi && S.scores.some(x => x < 0)) reason = 'トビで終了です';
+  else if (S.kyoku >= 2 * n) reason = '南場が終わりました';
+  else if (S.agariyame && wasOras && renchan && calcPts(S.scores, 0).rank[dealer()] === 1) reason = 'オーラスで親がトップです（アガリ止め・テンパイ止め）';
+  if (reason){ ui.end = reason; ui.yaki = S.won.map(w => !w); ui.sheet = 'end'; ui.sheetPos = 0; }
+}
+function recordGame(yaki){
+  const n = S.n, g = gameResult(yaki), P = Array(n), R = Array(n), Y = Array(n);
+  range(n).forEach(pos => { P[pid(pos)] = g.pts[pos]; R[pid(pos)] = g.rank[pos]; Y[pid(pos)] = !!(S.yakiOn && yaki && yaki[pos]); });
+  S.records.push({pts:P, rank:R, yaki:Y, at:Date.now()}); freshGame(S);
+}
+function finalizeMulti(){
+  const M = ui.mode, n = S.n;
+  // 供託は放銃者から見て上家取り（一番近い和了者）
+  const near = M.wins.slice().sort((a, b) => ((a - M.l + n) % n) - ((b - M.l + n) % n))[0];
+  if (S.kyotaku){ S.scores[near] += S.kyotaku * 1000; S.kyotaku = 0; }
+  ui.mode = null; endHand(M.wins.includes(dealer()), false); commit();
+  toast(`${M.wins.length}人の和了 → ${roundLabel()} ${S.honba}本場`);
+}
+
+/* ---------- dice & wall ---------- */
+function dieHTML(v){
+  const P = {1:[[15,15]],2:[[8,8],[22,22]],3:[[8,8],[15,15],[22,22]],4:[[8,8],[22,8],[8,22],[22,22]],
+    5:[[8,8],[22,8],[15,15],[8,22],[22,22]],6:[[8,8],[22,8],[8,15],[22,15],[8,22],[22,22]]}[v] || [];
+  const col = v === 1 || v === 4 ? '#d9432f' : '#1b1b1b', r = v === 1 ? 4.6 : 2.7;
+  return `<svg class="die" viewBox="0 0 30 30" aria-label="${v}"><rect x="1" y="1" width="28" height="28" rx="6" fill="#f7f2e4" stroke="#bfae84" stroke-width="1"/>${P.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${col}"/>`).join('')}</svg>`;
+}
+// physical position (0-3) of the wall to break; counts counter-clockwise from the dealer (1 = dealer)
+function wallInfo(){
+  if (!S.dice || ui.rolling) return null;
+  const sum = S.dice[0] + S.dice[1], d = dealer();
+  if (S.n === 3 && S.wall3 === 3){
+    const off = (sum - 1) % 3, pos = (d + off) % 3;
+    return {pos, text:`<em>${['自（親）','下家','上家'][off]}</em>＝${esc(name(pos))}の山`};
+  }
+  const off = (sum - 1) % 4, pos = (d + off) % 4;
+  if (pos >= S.n) return {pos, text:'<em>空席（北）</em>の山'};
+  return {pos, text:`<em>${['自（親）','下家','対面','上家'][off]}</em>＝${esc(name(pos))}の山`};
+}
+
+/* ---------- table ---------- */
+function seatHTML(i){
+  const d = dealer(), isD = i === d, sc = S.scores[i], M = ui.mode, id = pid(i);
+  const tile = `<div class="tile ${isD?'is-oya':''}">${windOf(i)}${isD?'<span class="oya">親</span>':''}</div>`;
+  let dl = '';
+  if (ui.flash && ui.flash.delta[i]){
+    const v = ui.flash.delta[i];
+    dl = `<div class="delta ${cls(v)}" style="animation-delay:-${Date.now() - ui.flash.t}ms">${sgn(v)}</div>`;
+  }
+  // payer: the face turns into an amount pad facing that player
+  if (M && M.type === 'pay' && M.f === i){
+    const chip = M.unit === 'chip';
+    const adds = (chip ? [1,2,3,5,-1] : [100,300,500,1000,5000,10000,-100,-1000]).map(v => `<button data-act="pay-add" data-v="${v}">${v>0?'+':'−'}${fmt(Math.abs(v))}</button>`).join('');
+    return `<div class="seat" data-pos="${i}"><div class="face active">${tile}
+      <div class="pad ${chip?'chipmode':''}"><div class="amt-l">${S.chipOn?`<button class="unit" data-act="pay-unit-t">${chip?'チップ':'点数'} ⇄</button>`:'<span>支払う</span>'}<b>${fmt(M.a)}</b><span>${chip?'枚':'点'}</span></div>
+        <div class="pc">${adds}<button data-act="pay-clr">0</button></div></div>
+      <div class="btns"><button class="fb" data-act="mode-x">取消</button></div>${dl}</div></div>`;
+  }
+  let badges = '';
+  if (S.yakiOn && !S.won[i]) badges += '<span class="bdg y">焼き鳥</span>';
+  if (S.chipOn) badges += `<span class="bdg c">チップ${S.chips[id] > 0 ? '+' : ''}${S.chips[id]}</span>`;
+  let right = '';
+  if (ui.diffBase != null && ui.diffBase < S.n && !M){
+    right = i === ui.diffBase ? '<span class="diff b">基準</span>' : `<span class="diff ${cls(sc - S.scores[ui.diffBase])}">${sgn(sc - S.scores[ui.diffBase])}</span>`;
+  } else if (sc < 0) right = '<span class="tobi">トビ</span>';
+  else if (S.riichi[i] && M) right = '<span class="rflag">リーチ</span>';
+  let act = '';
+  if (!M){
+    act = `<div class="btns"><button class="fb win" data-act="tsumo" data-i="${i}">ツモ</button>
+      <button class="fb win" data-act="ron" data-i="${i}">ロン</button>
+      <button class="fb rch ${S.riichi[i]?'on':''}" data-act="riichi" data-i="${i}"><span class="stick s1000"></span><span>リーチ</span></button></div>`;
+  } else if (M.type === 'pay'){
+    act = `<button class="tgt ${M.a?'':'dim'}" data-act="pay-to" data-i="${i}">受け取る<small>${M.a?`+${fmt(M.a)}${M.unit==='chip'?'枚':'点'}`:'金額待ち'}</small></button>`;
+  } else if (M.type === 'pick'){
+    act = `<button class="tgt" data-act="m-pay" data-i="${i}">支払う<small>この人が払う</small></button>`;
+  } else if (M.type === 'draw'){
+    act = `<div class="btns dr"><button class="tgt ${M.t[i]?'':'off'}" data-act="draw-t" data-i="${i}">${M.t[i]?'テンパイ':'ノーテン'}<small>タップで切替</small></button>
+      <button class="fb ${M.ng[i]?'on':''}" data-act="draw-ng" data-i="${i}">流し満貫</button></div>`;
+  } else if (M.type === 'multi'){
+    if (i === M.l) act = '<div class="tgt off">放銃</div>';
+    else if (M.wins.includes(i)) act = '<div class="tgt off">和了済</div>';
+    else act = `<button class="tgt red" data-act="ron2" data-i="${i}">ロン<small>この人も和了</small></button>`;
+  }
+  return `<div class="seat" data-pos="${i}"><div class="face ${isD?'dealer':''}">${tile}
+    <div class="mid"><div class="nm-row"><span class="nm">${esc(name(i))}</span>${badges}<span class="nr">${right}</span></div>
+      <button class="score ${sc<0?'neg':''}" data-act="diff" data-i="${i}" aria-label="${esc(name(i))}との点差を表示">${fmt(sc)}</button></div>
+    ${act}${dl}</div></div>`;
+}
+function centerHTML(){
+  const M = ui.mode, n = S.n;
+  const ended = S.kyoku >= 2 * n || (S.tobi && S.scores.some(x => x < 0));
+  const round = `<div class="round"><div class="rw">${roundLabel()}</div>
+      <div class="meta"><span><i class="stick s100"></i><b>${S.honba}</b>本場</span><span><i class="stick s1000"></i>供託<b>${S.kyotaku}</b></span></div>
+      ${!M && ended ? '<button class="tag gold" data-act="open" data-s="record">終局 → 記録する</button>' : !M && S.kyoku === 2 * n - 1 ? '<span class="tag">オーラス</span>' : ''}
+    </div>`;
+  const quit = '<div class="acts"><button class="act wide" data-act="mode-x">やめる</button></div>';
+  if (M && M.type === 'pay') return `<div class="center">${round}
+    <div class="mode-box"><b>${esc(name(M.f))} が支払い</b>自分の席で金額を入れ、受け取る人の席の「受け取る」をタップ</div>${quit}</div>`;
+  if (M && M.type === 'pick') return `<div class="center">${round}
+    <div class="mode-box"><b>点数移動</b>支払う人の席の「支払う」をタップ</div>${quit}</div>`;
+  if (M && M.type === 'multi') return `<div class="center">${round}
+    <div class="mode-box"><b>ダブロン入力中</b>放銃：${esc(name(M.l))}<br>他にロンした人の席で「ロン」をタップ</div>
+    <div class="acts"><button class="act wide primary" data-act="multi-end">ロン入力を終える</button></div></div>`;
+  if (M && M.type === 'draw'){
+    const delta = calcDraw(M), dd = dealer();
+    const next = M.abort ? '親続行・1本場追加' : (M.t[dd] || M.ng[dd]) ? '親続行（連荘）' : '親流れ → 次の局';
+    return `<div class="center">${round}
+      <div class="mode-box" style="text-align:left"><div class="mini-dl">${delta.map((v, i) => `<div><span>${esc(name(i))}</span><b class="${cls(v)}">${v?sgn(v):'±0'}</b></div>`).join('')}</div>
+        <div style="margin-top:6px;text-align:center">${M.ng.some(Boolean)&&!M.abort?'流し満貫（罰符なし）<br>':''}${next}</div></div>
+      <div class="acts"><button class="act wide primary" data-act="draw-ok">流局を確定</button>
+        <button class="act ${M.abort?'on':''}" data-act="draw-abort">途中流局</button><button class="act" data-act="mode-x">やめる</button></div></div>`;
+  }
+  const v = ui.rolling ? ui.diceVal : S.dice, wi = wallInfo();
+  let dice = '<span>サイコロを振る</span>';
+  if (v){
+    dice = `<span class="drow">${dieHTML(v[0])}${dieHTML(v[1])}<b>${v[0] + v[1]}</b>${wi ? `<span class="arrow" style="transform:rotate(${[180,90,0,-90][wi.pos]}deg)">▲</span>` : ''}</span>`;
+    if (wi) dice += `<span class="dtxt">${wi.text}</span>`;
+  }
+  return `<div class="center">${round}
+    <button class="dmini ${ui.rolling?'rolling':''}" data-act="dice-roll" aria-label="サイコロを振る">${dice}</button>
+    <div class="acts">
+      <button class="act" data-act="m-draw">流局</button>
+      <button class="act" data-act="m-pick">点数移動</button>
+      <button class="act" data-act="open" data-s="record">点数表・精算</button>
+      <button class="act" data-act="open" data-s="oya">親決め</button>
+    </div>
+    ${v ? '' : '<div class="chint">ツモ・ロン・リーチは<br>各自の席のボタンから</div>'}
+    <div class="hist-row"><button class="undo" data-act="undo" ${hist.length?'':'disabled'}>↶ 戻す</button><button class="undo" data-act="redo" ${future.length?'':'disabled'}>進む ↷</button><button class="undo" data-act="open" data-s="menu">その他≡</button></div>
+  </div>`;
+}
+function renderTable(){
+  let h = '';
+  for (let p = 0; p < 4; p++) h += p < S.n ? seatHTML(p) : `<div class="seat" data-pos="${p}"><div class="face empty">三人打ち（空席）</div></div>`;
+  tableEl.innerHTML = h + centerHTML();
+}
+
+/* ---------- sheets ---------- */
+const TITLES = {record:'点数表・精算', oya:'親決め', menu:'その他', set:'設定', seat:'席替え', end:'半荘終了'};
+function winValid(W){ return (W.yk || W.han > 0) && (W.how === 'tsumo' || (W.l != null && W.l !== W.w)); }
+function deltaRow(delta){
+  return `<div class="dl" style="grid-template-columns:repeat(${S.n},1fr)">${delta.map((v, i) => `<div><span>${esc(name(i))}</span><b class="${cls(v)}">${v ? sgn(v) : '±0'}</b></div>`).join('')}</div>`;
+}
+function tog(act, val, cur, label, sub){
+  return `<button class="chip ${cur===val?'on':''}" data-act="${act}" data-v="${val}">${label}${sub?`<small>${sub}</small>`:''}</button>`;
+}
+function yakiRow(){
+  if (!S.yakiOn) return '';
+  return `<div class="sec"><div class="lbl">焼き鳥（1回も和了していない人・タップで切替）</div><div class="chips" style="grid-template-columns:repeat(${S.n},1fr)">${range(S.n).map(i =>
+    `<button class="chip y ${ui.yaki[i]?'on':''}" data-act="yaki-t" data-i="${i}">${esc(name(i))}<small>${ui.yaki[i]?`焼き鳥 −${S.yakiPt}pt`:'なし'}</small></button>`).join('')}</div></div>`;
+}
+function resultPreview(title){
+  const g = gameResult(ui.yaki);
+  return `<div class="preview"><div class="pv-top"><span class="pv-hand">${title}</span></div>
+    <div class="dl" style="grid-template-columns:repeat(${S.n},1fr)">${g.pts.map((p, i) => `<div><span>${g.rank[i]}位 ${esc(name(i))}</span><b class="${cls(p)}">${pt1(p)}</b></div>`).join('')}</div></div>`;
+}
+function nameEditor(){
+  if (!ui.editNames) return '';
+  return `<div class="chips" style="grid-template-columns:repeat(${S.n},1fr)">${range(S.n).map(id => `<input class="inp" id="pn${id}" maxlength="8" value="${esc(pname(id))}" aria-label="名前${id+1}">`).join('')}</div>`;
+}
+
+const SHEETS = {
+  win(){
+    const W = ui.win, valid = winValid(W), n = S.n;
+    let han = '';
+    for (let h = 1; h <= 13; h++) han += `<button class="chip num ${!W.yk&&W.han===h?'on':''}" data-act="win-han" data-v="${h}">${h}</button>`;
+    han += `<button class="chip ${W.yk===1?'on':''}" data-act="win-yk" data-v="1">役満</button><button class="chip ${W.yk===2?'on':''}" data-act="win-yk" data-v="2">W役満</button>`;
+    let second;
+    if (W.yk){
+      const cand = range(n).filter(i => i !== W.w);
+      second = `<div class="sec s-fu"><div class="lbl">責任払い（包）</div><div class="chips" style="grid-template-columns:repeat(${cand.length+1},1fr)">
+        <button class="chip ${W.pao==null?'on':''}" data-act="win-pao" data-i="-1">なし</button>${cand.map(i => `<button class="chip ${W.pao===i?'on':''}" data-act="win-pao" data-i="${i}">${esc(name(i))}<small>包</small></button>`).join('')}</div></div>`;
+    } else {
+      const noFu = W.han >= 5;
+      const fu = [20,25,30,40,50,60,70,80,90,100,110].map(f => `<button class="chip num ${!noFu&&W.fu===f?'on':''}" data-act="win-fu" data-v="${f}" ${noFu||(W.how==='ron'&&f===20)?'disabled':''}>${f}</button>`).join('');
+      second = `<div class="sec s-fu"><div class="lbl">符${noFu?'（満貫以上は不要）':''}</div><div class="chips" style="grid-template-columns:repeat(6,1fr)">${fu}</div></div>`;
+    }
+    let from = '';
+    if (W.how === 'ron'){
+      const others = range(n).filter(i => i !== W.w);
+      from = `<div class="sec s-from"><div class="lbl">誰から（放銃した人）</div><div class="chips" style="grid-template-columns:repeat(${others.length},1fr)">${others.map(i =>
+        `<button class="chip ${W.l===i?'on':''}" data-act="win-l" data-i="${i}" ${W.cont&&W.l!==i?'disabled':''}>${esc(name(i))}<small>${windOf(i)}家・${POS[i]}</small></button>`).join('')}</div></div>`;
+    }
+    const opts = [];
+    if (W.how === 'ron' && !W.cont) opts.push(`<button class="chip ${W.multi?'on':''}" data-act="win-multi">${n===4?'ダブロン・トリロン':'ダブロン'}<small>他にもロンした人がいる</small></button>`);
+    if (S.chipOn) opts.push(`<div class="mstp"><button data-act="win-chip" data-v="-1">−</button><div>チップ <b>${W.chips}</b>枚<small>${W.how==='ron'?'放銃者から':'全員から'}</small></div><button data-act="win-chip" data-v="1">＋</button></div>`);
+    const optHTML = opts.length ? `<div class="opts" style="grid-template-columns:repeat(${opts.length},1fr)">${opts.join('')}</div>` : '';
+    const multi = W.multi || W.cont;
+    let pv = '<div class="hint">翻数を選んでください</div>';
+    if (W.how === 'ron' && W.l == null) pv = '<div class="hint">誰からのロンか選んでください</div>';
+    if (valid){
+      const r = calcWin(W, multi), hand = W.yk ? '' : W.han >= 5 ? W.han + '翻' : `${W.fu}符${W.han}翻`;
+      pv = `<div class="pv-top"><span class="pv-hand">${r.wd?'親':'子'}の${W.how==='ron'?'ロン':'ツモ'} ${hand}${r.pao!=null?` ／ 包：${esc(name(r.pao))}`:''}</span><span class="pv-big">${r.text}${r.limit?`<em>${r.limit}</em>`:''}</span></div>
+        ${S.honba||S.kyotaku?`<div class="hint">本場 ${S.honba}${multi?'（供託は最後に上家取り）':`・供託 ${S.kyotaku} 込み`}</div>`:''}${deltaRow(r.delta)}`;
+    }
+    return `<div class="wp"><div class="wp-l">
+      <div class="sec s-han"><div class="lbl">翻</div><div class="chips" style="grid-template-columns:repeat(8,1fr)">${han}</div></div>
+      ${second}</div><div class="wp-r">${from}${optHTML}
+      <div class="preview">${pv}</div>
+      <button class="big ok" data-act="win-ok" ${valid?'':'disabled'}>${W.multi&&!W.cont?'確定して次の和了者へ':'確定する'}</button></div></div>`;
+  },
+  record(){
+    const tabs = [['table','点数表'],['pay','精算'],['stats','成績']];
+    const tab = `<div class="tabs" style="grid-template-columns:repeat(3,1fr) auto">${tabs.map(([k, l]) => `<button class="${ui.recTab===k?'on':''}" data-act="rec-tab" data-v="${k}">${l}</button>`).join('')}
+      <button class="edit" data-act="edit-names">${ui.editNames?'名前 ✓':'名前 ✎'}</button></div>`;
+    return tab + nameEditor() + (ui.recTab === 'pay' ? payHTML() : ui.recTab === 'stats' ? statsHTML() : tableHTML());
+  },
+  end(){
+    return `<div class="end-reason">${esc(ui.end)}</div>
+      ${resultPreview('この半荘の結果')}${yakiRow()}
+      <div style="flex:1"></div>
+      <button class="big" data-act="end-rec">記録して次の半荘へ</button>
+      <button class="big sub" data-act="close">記録せずに続ける</button>`;
+  },
+  oya(){
+    const O = ui.oya;
+    const chips = range(S.n).map(i => `<button class="chip ${O.sel===i?'on':''}" data-act="oya-sel" data-i="${i}" ${O.spin?'disabled':''}>${esc(name(i))}<small>${POS[i]}${O.sel===i?' ・起家（東）':''}</small></button>`).join('');
+    return `<div class="hint">起家（東一局の親）を選ぶか、ランダムで決めます。決定すると東一局・0本場から始まります（点数はそのまま）。</div>
+      <div class="oya-map">${chips}<div class="mark">卓</div></div>
+      <button class="big sub" data-act="oya-rand" ${O.spin?'disabled':''}>ランダムで決める</button>
+      <button class="big" data-act="oya-ok" ${O.sel==null||O.spin?'disabled':''}>${O.sel==null?'起家を選択':esc(name(O.sel))+' を起家に決定'}</button>`;
+  },
+  seat(){
+    const chips = range(S.n).map(i => `<button class="chip ${ui.seatSel===i?'on':''}" data-act="seat-sel" data-i="${i}">${esc(name(i))}<small>${POS[i]}・${fmt(S.scores[i])}</small></button>`).join('');
+    return `<div class="hint">2人を順にタップすると席が入れ替わります（点数・リーチも一緒に移動。親と局はそのまま）。記録・成績・チップは人についていきます。</div>
+      <div class="oya-map">${chips}<div class="mark">卓</div></div>
+      <button class="big sub" data-act="seat-rand">ランダムに席替え</button>
+      <button class="big" data-act="close">完了</button>`;
+  },
+  menu(){
+    return `<div class="sec"><div class="lbl">局・本場・供託の調整</div>
+        <div class="stp"><button data-act="adj" data-k="kyoku" data-v="-1" ${S.kyoku?'':'disabled'}>◀</button><div class="v">${roundLabel()}<small>親：${esc(name(dealer()))}</small></div><button data-act="adj" data-k="kyoku" data-v="1">▶</button></div>
+        <div class="stp"><button data-act="adj" data-k="honba" data-v="-1" ${S.honba?'':'disabled'}>−</button><div class="v">${S.honba}<small>本場</small></div><button data-act="adj" data-k="honba" data-v="1">＋</button></div>
+        <div class="stp"><button data-act="adj" data-k="kyotaku" data-v="-1" ${S.kyotaku?'':'disabled'}>−</button><div class="v">${S.kyotaku}<small>供託（点数は動きません）</small></div><button data-act="adj" data-k="kyotaku" data-v="1">＋</button></div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="menu-grid">
+        <button class="big sub" data-act="open" data-s="set">設定・ルール</button>
+        <button class="big sub" data-act="open" data-s="seat">席替え</button>
+        <button class="big sub" data-act="undo" ${hist.length?'':'disabled'}>1つ戻す</button>
+        <button class="big sub" data-act="redo" ${future.length?'':'disabled'}>1つ進む</button>
+        <button class="big sub" data-act="wake">画面を消灯させない</button>
+        <button class="big warn" data-act="newgame">${ui.arm==='newgame'?'もう一度タップ':'点数をリセット'}</button>
+      </div>
+      <div class="rules">点数をリセットすると全員 ${fmt(S.start)} 点・東一局に戻ります（点数表の記録は残ります）。点数の数字をタップすると、その人を基準にした点差を表示します。</div>`;
+  },
+  set(){
+    const D = ui.set, n = D.n, T = ui.setTab;
+    const tabs = `<div class="tabs" style="grid-template-columns:repeat(3,1fr)">${[['basic','基本'],['rule','ルール'],['opt','オプション']].map(([k, l]) => `<button class="${T===k?'on':''}" data-act="set-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+    let body = '';
+    if (T === 'basic'){
+      const names = range(n).map(i => `<label class="fld">${POS[i]}<input class="inp" id="nm${i}" maxlength="8" value="${esc(D.names[i])}"></label>`).join('');
+      const presets = n === 4 ? [[5,10],[10,20],[10,30],[20,30]] : [[0],[10],[15],[20]];
+      const pre = presets.map(p => `<button class="chip" data-act="set-uma" data-v="${p.join(',')}">${n===4?p.join('-'):'±'+p[0]}</button>`).join('');
+      const uma = D.uma.map((u, i) => `<label class="fld">${i+1}位<input class="inp num" id="uma${i}" inputmode="numeric" value="${u}"></label>`).join('');
+      const sum = D.uma.reduce((a, b) => a + (+b || 0), 0);
+      body = `<div class="sec"><div class="lbl">人数</div><div class="chips" style="grid-template-columns:1fr 1fr">${tog('set-n', 4, n, '四人打ち')}${tog('set-n', 3, n, '三人打ち')}</div></div>
+        <div class="sec"><div class="lbl">名前（座る位置）</div><div class="chips" style="grid-template-columns:repeat(${n===4?2:3},1fr)">${names}</div></div>
+        <div class="sec"><div class="lbl">持ち点</div><div class="row2"><label class="fld">配給原点<input class="inp num" id="st" inputmode="numeric" value="${D.start}"></label><label class="fld">返し（オカ計算用）<input class="inp num" id="rt" inputmode="numeric" value="${D.ret}"></label></div></div>
+        <div class="sec"><div class="lbl">ウマ ${sum?`<span style="color:var(--bad)">（合計が ${sum} です）</span>`:''}</div>
+          <div class="chips" style="grid-template-columns:repeat(4,1fr)">${pre}</div>
+          <div class="chips" style="grid-template-columns:repeat(${n},1fr)">${uma}</div></div>`;
+    } else if (T === 'rule'){
+      const row = (label, act, cur, a, b) => `<div class="sec"><div class="lbl">${label}</div><div class="chips" style="grid-template-columns:1fr 1fr">${tog(act, a[0], cur, a[1], a[2])}${tog(act, b[0], cur, b[1], b[2])}</div></div>`;
+      body = row('30符4翻・60符3翻を満貫にする（切り上げ満貫）', 'set-kr', D.kiriage ? 1 : 0, [1,'する'], [0,'しない'])
+        + row('トビ終了（誰かが0点未満で終了）', 'set-tobi', D.tobi ? 1 : 0, [1,'あり'], [0,'なし'])
+        + row('アガリ止め・テンパイ止め（オーラス親トップ）', 'set-ay', D.agariyame ? 1 : 0, [1,'あり'], [0,'なし'])
+        + (n === 3 ? row('三人打ちのツモ', 'set-ts', D.tsumo, ['loss','ツモ損'], ['split','北家分を折半'])
+          + row('三人打ちのサイコロ（山の数え方）', 'set-w3', D.wall3, [4,'4方向','空席の山も数える'], [3,'3方向','3人だけで数える']) : '');
+    } else {
+      body = `<div class="sec"><div class="lbl">チップ（祝儀）</div><div class="chips" style="grid-template-columns:1fr 1fr 1fr">${tog('set-chip', 0, D.chipOn ? 1 : 0, 'なし')}${tog('set-chip', 1, D.chipOn ? 1 : 0, 'あり', '和了時に入力')}
+          <label class="fld">1枚の金額（円）<input class="inp num" id="chipYen" inputmode="numeric" value="${D.chipYen}"></label></div></div>
+        <div class="sec"><div class="lbl">焼き鳥（半荘中に1度も和了なし）</div><div class="chips" style="grid-template-columns:1fr 1fr 1fr">${tog('set-yaki', 0, D.yakiOn ? 1 : 0, 'なし')}${tog('set-yaki', 1, D.yakiOn ? 1 : 0, 'あり', '他の人で山分け')}
+          <label class="fld">1人あたり（pt）<input class="inp num" id="yakiPt" inputmode="decimal" value="${D.yakiPt}"></label></div></div>
+        <div class="sec"><div class="lbl">トップ賞（トップに加算・他の人で等分して負担）</div><div class="row2">
+          <label class="fld">トップ賞（pt、0でなし）<input class="inp num" id="topPt" inputmode="decimal" value="${D.topPt}"></label><div></div></div></div>
+        <div class="rules">チップは精算画面で「1枚の金額」を掛けて収支に加わります。点数移動の画面でもチップを受け渡しできます。</div>`;
+    }
+    return tabs + body + `<div style="flex:1"></div>
+      ${n!==S.n?'<div class="hint" style="color:var(--bad)">人数を変えると、現在の半荘・点数表・成績・チップが初期化されます。</div>':''}
+      <button class="big" data-act="set-save">${ui.arm==='set-save'?'もう一度タップで保存':'保存する'}</button>`;
+  }
+};
+function tableHTML(){
+  const n = S.n, tot = totals(), oka = (S.ret - S.start) * n / 1000;
+  const rows = S.records.map((r, k) => `<tr><td>${k+1}</td>${r.pts.map((p, id) => `<td class="${cls(p)}">${pt1(p)}${r.yaki&&r.yaki[id]?'<small>焼き鳥</small>':''}</td>`).join('')}</tr>`).join('')
+    || `<tr><td colspan="${n+1}" style="text-align:center;font-family:var(--jp);font-size:13px;color:var(--muted);padding:18px">まだ記録はありません</td></tr>`;
+  const umaTxt = S.uma.map(u => (u > 0 ? '+' : '') + u).join(' / ');
+  const extras = [S.topPt ? `トップ賞 ${S.topPt}pt` : '', S.yakiOn ? `焼き鳥 ${S.yakiPt}pt` : ''].filter(Boolean).join('・');
+  return `<div class="rules">原点 ${fmt(S.start)}・返し ${fmt(S.ret)}（オカ +${oka}）・ウマ ${umaTxt}${extras?'・'+extras:''}</div>
+    ${resultPreview(`この半荘（${roundLabel()}時点の暫定）`)}${yakiRow()}
+    <div class="tblwrap"><table><thead><tr><th>#</th>${range(n).map(id => `<th>${esc(pname(id))}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>計</td>${tot.map(p => `<td class="${cls(p)}">${pt1(p)}</td>`).join('')}</tr></tfoot></table></div>
+    <button class="big" data-act="rec-add">${ui.arm==='rec-add'?'もう一度タップで記録':'この半荘を記録して次の半荘へ'}</button>
+    <div class="row2"><button class="big sub" data-act="rec-del" ${S.records.length?'':'disabled'}>${ui.arm==='rec-del'?'もう一度タップ':'最後の記録を削除'}</button>
+      <button class="big sub" data-act="rec-clr" ${S.records.length?'':'disabled'}>${ui.arm==='rec-clr'?'もう一度タップ':'記録をすべて消去'}</button></div>`;
+}
+function payHTML(){
+  const n = S.n, st = settle();
+  const rates = [[10,'点1'],[30,'点3'],[50,'点5'],[100,'点ピン']].map(([v, l]) => `<button class="chip ${S.rate===v?'on':''}" data-act="pay-rate" data-v="${v}">${l}<small>${v}円</small></button>`).join('');
+  const payer = `<button class="chip ${S.feePayer===-1?'on':''}" data-act="pay-payer" data-i="-1">各自<small>店に直接</small></button>` +
+    `<button class="chip ${S.feePayer===-2?'on':''}" data-act="pay-payer" data-i="-2">トップ<small>皆から徴収</small></button>` +
+    range(n).map(id => `<button class="chip ${S.feePayer===id?'on':''}" data-act="pay-payer" data-i="${id}">${esc(pname(id))}<small>立替</small></button>`).join('');
+  const colNote = S.feePayer === -2 ? '徴収' : '立替込み';
+  const rows = st.rows.map((r, id) => `<tr><td class="nmc">${esc(pname(id))}${S.feePayer===-2&&st.collector===id?'<small>トップ</small>':''}</td><td class="${cls(r.p)}">${pt1(r.p)}</td>
+      <td class="${cls(r.win)}">${yen(r.win)}</td>${S.chipOn?`<td class="${cls(r.chip)}">${yen(r.chip)}<small>${S.chips[id]}枚</small></td>`:''}<td class="${cls(r.fee)}">${yen(r.fee)}${st.collector===id&&S.fee?`<small>${colNote}</small>`:''}</td>
+      <td class="net ${cls(r.net)}">${yen(r.net)}</td></tr>`).join('');
+  let xf = st.xfers.map(x => `<div><span>${esc(pname(x.f))} → ${esc(pname(x.t))}</span><b>${fmt(x.a)}円</b></div>`).join('');
+  if (S.feePayer === -2 && S.fee) xf += `<div><span>場所代：${esc(pname(st.collector))} が店へ</span><b>${fmt(S.fee)}円</b></div>`;
+  if (S.feePayer === -1 && S.fee) xf += `<div><span>場所代：各自 店へ</span><b>${fmt(st.share)}円</b></div>`;
+  if (!xf) xf = '<div><span class="hint">支払いはありません</span></div>';
+  return `<div class="row2"><label class="fld">レート（1,000点＝1ptあたり 円）<input class="inp num" id="rate" inputmode="numeric" value="${S.rate}"></label>
+      <label class="fld">場所代 合計（円）<input class="inp num" id="fee" inputmode="numeric" value="${S.fee}"></label></div>
+    <div class="chips" style="grid-template-columns:repeat(4,1fr)">${rates}</div>
+    <div class="sec"><div class="lbl">場所代の支払い（1人 ${fmt(st.share)}円）</div><div class="chips" style="grid-template-columns:repeat(${Math.ceil((n+2)/2)},1fr)">${payer}</div></div>
+    <div class="sec"><div class="lbl">端数の丸め</div><div class="chips" style="grid-template-columns:repeat(3,1fr)">${[1,10,100].map(u => `<button class="chip ${S.unit===u?'on':''}" data-act="pay-unit" data-v="${u}">${u}円単位</button>`).join('')}</div></div>
+    <div class="tblwrap fit"><table class="${S.chipOn?'sm':''}"><thead><tr><th>名前</th><th>合計pt</th><th>勝ち負け</th>${S.chipOn?'<th>チップ</th>':''}<th>場所代</th><th>収支</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="sec"><div class="lbl">支払い（記録済み ${S.records.length} 半荘分）${st.gap?`<span style="color:var(--bad)">・丸めの差 ${yen(st.gap)}円</span>`:''}</div><div class="xfer">${xf}</div></div>`;
+}
+function statsHTML(){
+  const n = S.n, ids = range(n), recs = S.records, pct = (a, b) => b ? (a / b * 100).toFixed(1) + '%' : '−';
+  const rk = id => recs.map(r => r.rank[id]).filter(Boolean);
+  const rows = [
+    ['半荘数', id => rk(id).length],
+    ['平均順位', id => { const a = rk(id); return a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : '−'; }],
+    ['トップ率', id => pct(rk(id).filter(x => x === 1).length, rk(id).length)],
+    ['ラス率', id => pct(rk(id).filter(x => x === n).length, rk(id).length)],
+    ['通算pt', id => pt1(totals()[id])],
+    ['局数', id => S.st[id].hands],
+    ['和了率', id => pct(S.st[id].wins, S.st[id].hands)],
+    ['放銃率', id => pct(S.st[id].dealins, S.st[id].hands)],
+    ['リーチ率', id => pct(S.st[id].riichi, S.st[id].hands)],
+    ['平均打点', id => S.st[id].wins ? fmt(Math.round(S.st[id].winSum / S.st[id].wins / 100) * 100) : '−'],
+  ];
+  if (S.chipOn) rows.push(['チップ', id => (S.chips[id] > 0 ? '+' : '') + S.chips[id] + '枚']);
+  return `<div class="tblwrap"><table class="sm"><thead><tr><th></th>${ids.map(id => `<th>${esc(pname(id))}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(([l, f]) => `<tr><td>${l}</td>${ids.map(id => `<td>${f(id)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <div class="rules">局数・和了率などは対局中の局も含みます。「記録をすべて消去」で成績もリセットされます。</div>`;
+}
+function renderSheet(){
+  if (!ui.sheet){ sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
+  const scroll = sheetEl.querySelector('.sh-body')?.scrollTop || 0;
+  const same = sheetEl.dataset.s === ui.sheet && !sheetEl.hidden;
+  const pos = ui.sheetPos || 0, W = tableEl.clientWidth, H = tableEl.clientHeight, side = pos % 2 === 1;
+  sheetEl.hidden = false; sheetEl.dataset.s = ui.sheet;
+  sheetEl.style.width = (side ? H : W) + 'px'; sheetEl.style.height = (side ? W : H) + 'px';
+  sheetEl.style.transform = `translate(-50%,-50%) rotate(${[0,-90,180,90][pos]}deg)`;
+  sheetEl.style.animation = same ? 'none' : '';
+  let title = TITLES[ui.sheet];
+  if (ui.sheet === 'win'){ const W2 = ui.win; title = `${name(W2.w)} の${W2.how==='ron'?'ロン':'ツモ'}${W2.cont?`（${ui.mode.wins.length+1}人目）`:''}`; }
+  sheetEl.innerHTML = `<div class="sh-head"><h2>${esc(title)}</h2><button class="x" data-act="close" aria-label="閉じる">✕</button></div><div class="sh-body">${SHEETS[ui.sheet]()}</div>`;
+  sheetEl.querySelector('.sh-body').scrollTop = scroll;
+}
+function render(){ renderTable(); renderSheet(); }
+
+function openSheet(s, pos=0, keepMode=false){
+  ui.arm = null; ui.sheetPos = pos; if (!keepMode) ui.mode = null;
+  if (s === 'oya') ui.oya = {sel:S.kiche, spin:false};
+  if (s === 'seat') ui.seatSel = null;
+  if (s === 'record') ui.yaki = S.won.map(w => !w);
+  if (s === 'set') ui.set = {n:S.n, names:range(4).map(i => i < S.n ? name(i) : ''), start:S.start, ret:S.ret, uma:S.uma.slice(),
+    tsumo:S.tsumo, kiriage:S.kiriage, wall3:S.wall3, tobi:S.tobi, agariyame:S.agariyame, chipOn:S.chipOn, chipYen:S.chipYen, yakiOn:S.yakiOn, yakiPt:S.yakiPt, topPt:S.topPt};
+  ui.sheet = s; render();
+}
+function readSet(){
+  const D = ui.set; if (!D) return;
+  const num = (id, int) => { const e = document.getElementById(id); if (!e) return null; const v = int ? parseInt(e.value, 10) : parseFloat(e.value); return isNaN(v) ? null : v; };
+  for (let i = 0; i < D.n; i++){ const e = document.getElementById('nm' + i); if (e) D.names[i] = e.value; }
+  const st = num('st', 1), rt = num('rt', 1); if (st != null) D.start = st; if (rt != null) D.ret = rt;
+  D.uma = D.uma.map((u, i) => { const v = num('uma' + i); return v == null ? u : v; });
+  const cy = num('chipYen', 1), yp = num('yakiPt'), tp = num('topPt');
+  if (cy != null) D.chipYen = Math.max(0, cy); if (yp != null) D.yakiPt = Math.max(0, yp); if (tp != null) D.topPt = Math.max(0, tp);
+}
+function swapSeats(a, b){
+  for (const k of ['seats','scores','riichi','won']) [S[k][a], S[k][b]] = [S[k][b], S[k][a]];
+}
+
+/* ---------- actions ---------- */
+let wakeLock = null;
+async function requestWake(show){
+  try{ wakeLock = await navigator.wakeLock.request('screen'); if (show) toast('画面を点灯したままにします'); }
+  catch(e){ if (show) toast('この環境では画面の常時点灯を設定できません'); }
+}
+function openWin(w, how, l, cont){ ui.win = {w, how, l, han:0, fu:30, yk:0, pao:null, chips:0, multi:false, cont}; openSheet('win', w, cont); }
+
+const ACT = {
+  open: d => openSheet(d.s),
+  close: () => { ui.sheet = null; ui.arm = null; render(); },
+  undo: () => {
+    if (!hist.length) return;
+    future.push(JSON.stringify(S)); if (future.length > 40) future.shift();
+    S = migrate(JSON.parse(hist.pop())); ui.sheet = null; ui.mode = null; ui.flash = null; save(); render(); toast('1つ前の状態に戻しました');
+  },
+  redo: () => {
+    if (!future.length) return;
+    hist.push(JSON.stringify(S)); if (hist.length > 40) hist.shift();
+    S = migrate(JSON.parse(future.pop())); ui.sheet = null; ui.mode = null; ui.flash = null; save(); render(); toast('1つ先の状態に進めました');
+  },
+  diff: d => {
+    if (ui.mode) return;
+    const i = +d.i; ui.diffBase = ui.diffBase === i ? null : i; clearTimeout(diffTimer);
+    diffTimer = setTimeout(() => { ui.diffBase = null; render(); }, 6000); render();
+  },
+  riichi: d => {
+    const i = +d.i, st = S.st[pid(i)]; push();
+    if (S.riichi[i]){ S.riichi[i] = false; S.scores[i] += 1000; S.kyotaku = Math.max(0, S.kyotaku - 1); st.riichi = Math.max(0, st.riichi - 1); }
+    else { S.riichi[i] = true; S.scores[i] -= 1000; S.kyotaku++; st.riichi++; }
+    commit();
+  },
+  'mode-x': () => { ui.mode = null; render(); },
+  'm-pick': () => { ui.diffBase = null; ui.mode = {type:'pick'}; render(); },
+  'm-pay': d => { ui.diffBase = null; ui.mode = {type:'pay', f:+d.i, a:0, unit:'pt'}; render(); },
+  'm-draw': () => { ui.diffBase = null; ui.mode = {type:'draw', t:Array(S.n).fill(false), ng:Array(S.n).fill(false), abort:false}; render(); },
+  tsumo: d => openWin(+d.i, 'tsumo', null, false),
+  ron: d => openWin(+d.i, 'ron', null, false),
+  ron2: d => openWin(+d.i, 'ron', ui.mode.l, true),
+  'multi-end': () => { push(); finalizeMulti(); },
+  'win-l': d => { ui.win.l = +d.i; if (ui.win.pao === ui.win.l) ui.win.pao = null; render(); },
+  'win-han': d => { Object.assign(ui.win, {han:+d.v, yk:0, pao:null}); render(); },
+  'win-yk': d => { Object.assign(ui.win, {yk:+d.v, han:13}); render(); },
+  'win-fu': d => { ui.win.fu = +d.v; render(); },
+  'win-pao': d => { ui.win.pao = +d.i < 0 ? null : +d.i; render(); },
+  'win-multi': () => { ui.win.multi = !ui.win.multi; render(); },
+  'win-chip': d => { ui.win.chips = Math.max(0, ui.win.chips + +d.v); render(); },
+  'win-ok': () => {
+    const W = ui.win; if (!winValid(W)) return;
+    const n = S.n, multi = W.multi || W.cont, r = calcWin(W, multi), wid = pid(W.w); push();
+    r.delta.forEach((v, i) => S.scores[i] += v);
+    if (S.chipOn && W.chips){
+      if (W.how === 'ron'){ S.chips[pid(W.l)] -= W.chips; S.chips[wid] += W.chips; }
+      else range(n).forEach(i => { if (i !== W.w){ S.chips[pid(i)] -= W.chips; S.chips[wid] += W.chips; } });
+    }
+    S.won[W.w] = true; S.st[wid].wins++; S.st[wid].winSum += r.value;
+    if (W.how === 'ron' && !W.cont) S.st[pid(W.l)].dealins++;
+    ui.sheet = null; flash(r.delta);
+    if (multi){
+      ui.mode = {type:'multi', l:W.l, wins:W.cont ? [...ui.mode.wins, W.w] : [W.w]};
+      if (n - 1 - ui.mode.wins.length <= 0) return finalizeMulti();
+      commit(); toast('次の和了者の席で「ロン」をタップ'); return;
+    }
+    S.kyotaku = 0; endHand(r.wd, false); commit();
+    toast(`${name(W.w)} ${W.how==='ron'?'ロン':'ツモ'} ${r.limit || r.text}　→ ${roundLabel()} ${S.honba}本場`);
+  },
+  'pay-add': d => { ui.mode.a = Math.max(0, ui.mode.a + +d.v); render(); },
+  'pay-clr': () => { ui.mode.a = 0; render(); },
+  'pay-unit-t': () => { ui.mode.unit = ui.mode.unit === 'chip' ? 'pt' : 'chip'; ui.mode.a = 0; render(); },
+  'pay-to': d => {
+    const M = ui.mode, t = +d.i;
+    if (!M.a){ toast(`${name(M.f)} の席で金額を入れてください`); return; }
+    push();
+    if (M.unit === 'chip'){ S.chips[pid(M.f)] -= M.a; S.chips[pid(t)] += M.a; ui.mode = null; commit(); toast(`${name(M.f)} → ${name(t)} チップ ${M.a}枚`); return; }
+    const delta = Array(S.n).fill(0); delta[M.f] = -M.a; delta[t] = M.a;
+    S.scores[M.f] -= M.a; S.scores[t] += M.a; ui.mode = null; flash(delta); commit();
+    toast(`${name(M.f)} → ${name(t)} ${fmt(M.a)}点`);
+  },
+  'draw-t': d => { ui.mode.t[+d.i] = !ui.mode.t[+d.i]; render(); },
+  'draw-ng': d => { ui.mode.ng[+d.i] = !ui.mode.ng[+d.i]; render(); },
+  'draw-abort': () => { ui.mode.abort = !ui.mode.abort; render(); },
+  'draw-ok': () => {
+    const M = ui.mode, delta = calcDraw(M), dd = dealer(), ren = M.abort || M.t[dd] || M.ng[dd]; push();
+    delta.forEach((v, i) => S.scores[i] += v);
+    if (!M.abort) M.ng.forEach((on, i) => { if (on) S.won[i] = true; });
+    ui.mode = null; flash(delta); endHand(ren, true); commit(); toast(`流局 → ${roundLabel()} ${S.honba}本場`);
+  },
+  'rec-tab': d => { ui.recTab = d.v; ui.arm = null; render(); },
+  'edit-names': () => { ui.editNames = !ui.editNames; render(); },
+  'yaki-t': d => { ui.yaki[+d.i] = !ui.yaki[+d.i]; render(); },
+  'rec-add': () => {
+    if (ui.arm !== 'rec-add'){ arm('rec-add'); return render(); }
+    push(); recordGame(ui.yaki); ui.yaki = S.won.map(w => !w); ui.arm = null; commit();
+    toast(`第${S.records.length}半荘を記録しました。次の半荘は東一局から`);
+  },
+  'end-rec': () => {
+    push(); recordGame(ui.yaki); ui.sheet = null; commit();
+    toast(`第${S.records.length}半荘を記録しました（席替えは「その他」から）`);
+  },
+  'rec-del': () => { if (ui.arm !== 'rec-del'){ arm('rec-del'); return render(); } push(); S.records.pop(); ui.arm = null; commit(); toast('最後の記録を削除しました'); },
+  'rec-clr': () => { if (ui.arm !== 'rec-clr'){ arm('rec-clr'); return render(); } push(); S.records = []; S.st = newStats(); S.chips = [0,0,0,0]; ui.arm = null; commit(); toast('記録・成績・チップを消去しました'); },
+  'pay-rate': d => { S.rate = +d.v; commit(); },
+  'pay-payer': d => { S.feePayer = +d.i; commit(); },
+  'pay-unit': d => { S.unit = +d.v; commit(); },
+  'oya-sel': d => { ui.oya.sel = +d.i; render(); },
+  'oya-rand': () => {
+    const O = ui.oya; O.spin = true; const target = Math.floor(Math.random() * S.n); let k = 0; const steps = S.n * 3 + target + 1;
+    const tick = () => { O.sel = k % S.n; render(); k++; if (k < steps) setTimeout(tick, 60 + k * 9); else { O.spin = false; O.sel = target; render(); } };
+    tick();
+  },
+  'oya-ok': () => {
+    const O = ui.oya; if (O.sel == null) return; push();
+    S.kiche = O.sel; S.kyoku = 0; S.honba = 0; S.dice = null; ui.sheet = null; commit(); toast(`${name(S.kiche)} が起家（東一局の親）です`);
+  },
+  'seat-sel': d => {
+    const i = +d.i;
+    if (ui.seatSel == null){ ui.seatSel = i; return render(); }
+    if (ui.seatSel === i){ ui.seatSel = null; return render(); }
+    push(); swapSeats(ui.seatSel, i); ui.seatSel = null; commit();
+  },
+  'seat-rand': () => {
+    push();
+    for (let i = S.n - 1; i > 0; i--) swapSeats(i, Math.floor(Math.random() * (i + 1)));
+    ui.seatSel = null; commit(); toast('席替えしました');
+  },
+  'dice-roll': () => {
+    if (ui.rolling || ui.mode) return; ui.rolling = true; ui.diffBase = null; let k = 0;
+    const roll = () => [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
+    const tick = () => { ui.diceVal = roll(); render(); if (++k < 9) setTimeout(tick, 70); else { ui.rolling = false; S.dice = ui.diceVal; commit(); } };
+    tick();
+  },
+  adj: d => {
+    const k = d.k, v = +d.v; if (S[k] + v < 0) return; push(); S[k] += v;
+    if (k === 'kyoku'){ S.riichi = Array(S.n).fill(false); S.dice = null; }
+    commit();
+  },
+  wake: () => requestWake(true),
+  newgame: () => {
+    if (ui.arm !== 'newgame'){ arm('newgame'); return render(); }
+    push(); freshGame(S); ui.arm = null; ui.sheet = null; commit(); toast(`全員 ${fmt(S.start)} 点・東一局から開始`);
+  },
+  'set-tab': d => { ui.setTab = d.v; render(); },
+  'set-n': d => {
+    const D = ui.set, n = +d.v; if (D.n === n) return;
+    D.n = n; Object.assign(D, ruleDefaults(n)); render();
+  },
+  'set-uma': d => {
+    const p = d.v.split(',').map(Number), n = ui.set.n;
+    ui.set.uma = n === 4 ? [p[1], p[0], -p[0], -p[1]] : [p[0], 0, -p[0]]; render();
+  },
+  'set-ts': d => { ui.set.tsumo = d.v; render(); },
+  'set-kr': d => { ui.set.kiriage = d.v === '1'; render(); },
+  'set-w3': d => { ui.set.wall3 = +d.v; render(); },
+  'set-tobi': d => { ui.set.tobi = d.v === '1'; render(); },
+  'set-ay': d => { ui.set.agariyame = d.v === '1'; render(); },
+  'set-chip': d => { ui.set.chipOn = d.v === '1'; render(); },
+  'set-yaki': d => { ui.set.yakiOn = d.v === '1'; render(); },
+  'set-save': () => {
+    const D = ui.set, nChg = D.n !== S.n;
+    if (nChg && ui.arm !== 'set-save'){ arm('set-save'); return render(); }
+    const pristine = S.kyoku === 0 && S.honba === 0 && S.kyotaku === 0 && S.scores.every(x => x === S.start);
+    push();
+    Object.assign(S, {n:D.n, start:D.start, ret:D.ret, uma:D.uma.slice(0, D.n), tsumo:D.tsumo, kiriage:D.kiriage, wall3:D.wall3, tobi:D.tobi,
+      agariyame:D.agariyame, chipOn:D.chipOn, chipYen:D.chipYen, yakiOn:D.yakiOn, yakiPt:D.yakiPt, topPt:D.topPt});
+    if (nChg){ S.seats = range(D.n); S.records = []; S.kiche = 0; S.feePayer = -1; S.chips = [0,0,0,0]; S.st = newStats(); }
+    if (nChg || pristine) freshGame(S);
+    range(S.n).forEach(i => { S.pl[pid(i)].name = String(D.names[i] || '').trim() || 'ABCD'[pid(i)] + 'さん'; });
+    ui.sheet = null; ui.arm = null; commit(); toast('設定を保存しました');
+  }
+};
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  if (ui.sheet === 'set') readSet();
+  const f = ACT[b.dataset.act]; if (f) f(b.dataset);
+});
+document.addEventListener('change', e => {
+  const id = e.target.id;
+  if (id === 'rate' || id === 'fee'){ const v = parseInt(e.target.value, 10); S[id] = isNaN(v) || v < 0 ? 0 : v; commit(); return; }
+  const m = /^pn(\d)$/.exec(id);
+  if (m){ const v = e.target.value.trim(); if (v){ S.pl[+m[1]].name = v; save(); renderTable(); } }
+});
+document.addEventListener('pointerdown', () => { if (!wakeLock) requestWake(false); }, {once:true});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wakeLock) requestWake(false); });
+
+/* ---------- layout ---------- */
+function layout(){
+  const W = tableEl.clientWidth, H = tableEl.clientHeight;
+  const band = Math.round(Math.min(H * 0.2, W * 0.42));
+  const side = Math.round(Math.min(W * 0.25, H * 0.16));
+  const r = document.documentElement.style;
+  r.setProperty('--band', band + 'px'); r.setProperty('--side', side + 'px'); r.setProperty('--mid', (H - 2 * band) + 'px');
+  if (ui.sheet) renderSheet();
+}
+new ResizeObserver(layout).observe(tableEl);
+layout(); render();
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body></html>
